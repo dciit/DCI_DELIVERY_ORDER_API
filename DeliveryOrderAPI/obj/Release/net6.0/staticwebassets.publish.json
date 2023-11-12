@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "azlQzEoK+uPZR6cVxLa3k8YBowMCaaC/ZPDD2wYe5Dc=",
+  "Source": "DeliveryOrderAPI",
+  "BasePath": "_content/DeliveryOrderAPI",
+  "Mode": "Default",
+  "ManifestType": "Publish",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
