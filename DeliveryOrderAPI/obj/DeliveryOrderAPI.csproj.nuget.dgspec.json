@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\git\\DeliveryOrderAPI\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj": {}
+    "D:\\git\\DCI_DELIVERY_ORDER_API\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj": {}
   },
   "projects": {
-    "D:\\git\\DeliveryOrderAPI\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj": {
+    "D:\\git\\DCI_DELIVERY_ORDER_API\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\git\\DeliveryOrderAPI\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj",
+        "projectUniqueName": "D:\\git\\DCI_DELIVERY_ORDER_API\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj",
         "projectName": "DeliveryOrderAPI",
-        "projectPath": "D:\\git\\DeliveryOrderAPI\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj",
+        "projectPath": "D:\\git\\DCI_DELIVERY_ORDER_API\\DeliveryOrderAPI\\DeliveryOrderAPI.csproj",
         "packagesPath": "C:\\Users\\peerapong.k.ITNB17_41256\\.nuget\\packages\\",
-        "outputPath": "D:\\git\\DeliveryOrderAPI\\DeliveryOrderAPI\\obj\\",
+        "outputPath": "D:\\git\\DCI_DELIVERY_ORDER_API\\DeliveryOrderAPI\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -76,6 +76,10 @@
             "Oracle.ManagedDataAccess.Core": {
               "target": "Package",
               "version": "[3.21.100, )"
+            },
+            "Swashbuckle.AspNetCore": {
+              "target": "Package",
+              "version": "[6.5.0, )"
             }
           },
           "imports": [

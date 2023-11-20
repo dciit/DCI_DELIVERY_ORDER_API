@@ -26,6 +26,8 @@ public partial class DBSCM : DbContext
 
     public virtual DbSet<DoHistory> DoHistories { get; set; }
 
+    public virtual DbSet<DoHistoryDev> DoHistoryDevs { get; set; }
+
     public virtual DbSet<DoMaster> DoMasters { get; set; }
 
     public virtual DbSet<DoPartMaster> DoPartMasters { get; set; }
@@ -35,6 +37,8 @@ public partial class DBSCM : DbContext
     public virtual DbSet<DoPlanDev> DoPlanDevs { get; set; }
 
     public virtual DbSet<DoReq> DoReqs { get; set; }
+
+    public virtual DbSet<DoStockAlpha> DoStockAlphas { get; set; }
 
     public virtual DbSet<DoVenderMaster> DoVenderMasters { get; set; }
 
@@ -183,6 +187,46 @@ public partial class DBSCM : DbContext
         modelBuilder.Entity<DoHistory>(entity =>
         {
             entity.ToTable("DO_HISTORY");
+
+            entity.Property(e => e.Id).HasColumnName("ID");
+            entity.Property(e => e.DateVal)
+                .HasMaxLength(8)
+                .HasColumnName("DATE_VAL");
+            entity.Property(e => e.DoVal).HasColumnName("DO_VAL");
+            entity.Property(e => e.InsertBy)
+                .HasMaxLength(30)
+                .HasColumnName("INSERT_BY");
+            entity.Property(e => e.InsertDt)
+                .HasColumnType("datetime")
+                .HasColumnName("INSERT_DT");
+            entity.Property(e => e.Model)
+                .HasMaxLength(25)
+                .HasColumnName("MODEL");
+            entity.Property(e => e.Partno)
+                .HasMaxLength(50)
+                .HasColumnName("PARTNO");
+            entity.Property(e => e.PlanVal).HasColumnName("PLAN_VAL");
+            entity.Property(e => e.Rev).HasColumnName("REV");
+            entity.Property(e => e.Revision).HasColumnName("REVISION");
+            entity.Property(e => e.RunningCode)
+                .HasMaxLength(8)
+                .HasColumnName("RUNNING_CODE");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasColumnName("STATUS");
+            entity.Property(e => e.Stock).HasColumnName("STOCK");
+            entity.Property(e => e.StockVal).HasColumnName("STOCK_VAL");
+            entity.Property(e => e.TimeScheduleDelivery)
+                .HasMaxLength(8)
+                .HasColumnName("TIME_SCHEDULE_DELIVERY");
+            entity.Property(e => e.VdCode)
+                .HasMaxLength(10)
+                .HasColumnName("VD_CODE");
+        });
+
+        modelBuilder.Entity<DoHistoryDev>(entity =>
+        {
+            entity.ToTable("DO_HISTORY_DEV");
 
             entity.Property(e => e.Id).HasColumnName("ID");
             entity.Property(e => e.DateVal)
@@ -710,6 +754,37 @@ public partial class DBSCM : DbContext
                 .HasMaxLength(10)
                 .IsUnicode(false)
                 .HasColumnName("VD_CODE");
+        });
+
+        modelBuilder.Entity<DoStockAlpha>(entity =>
+        {
+            entity.HasKey(e => new { e.Partno, e.DatePd, e.Vdcode, e.Cm });
+
+            entity.ToTable("DO_STOCK_ALPHA");
+
+            entity.Property(e => e.Partno)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasColumnName("PARTNO");
+            entity.Property(e => e.DatePd)
+                .HasComment("วันที่ มี STOCK ALPHA")
+                .HasColumnName("DATE_PD");
+            entity.Property(e => e.Vdcode)
+                .HasMaxLength(10)
+                .IsUnicode(false)
+                .HasColumnName("VDCODE");
+            entity.Property(e => e.Cm)
+                .HasMaxLength(2)
+                .IsUnicode(false)
+                .HasColumnName("CM");
+            entity.Property(e => e.InsertDt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime")
+                .HasColumnName("INSERT_DT");
+            entity.Property(e => e.Rev)
+                .HasComment("999 คือใช้งาน นอกนั้นให้เก็บเป็น REV = 1, 2 , 3 , ....")
+                .HasColumnName("REV");
+            entity.Property(e => e.Stock).HasColumnName("STOCK");
         });
 
         modelBuilder.Entity<DoVenderMaster>(entity =>

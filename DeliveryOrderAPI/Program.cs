@@ -16,6 +16,7 @@ builder.WebHost.ConfigureKestrel(c =>
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 // Add services to the container.S
 builder.Services.AddControllers();
 builder.Services.AddDbContext<DBSCM>();
@@ -27,23 +28,15 @@ builder.Services.AddCors(options => options.AddPolicy("Cors", builder =>
     .AllowAnyMethod()
     .AllowAnyHeader();
 }));
-//builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(
-//opt =>
-//{
-//    opt.TokenValidationParameters = new TokenValidationParameters
-//    {
-//        ValidateIssuerSigningKey = true,
-//        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8
-//        .GetBytes("scm.daikin.co.jp")),
-//        ValidateIssuer = false,
-//        ValidateAudience = false
-//    };
-//}
-//);
 var app = builder.Build();
 app.UseCors("Cors");
-app.UseAuthentication();
-//app.UseAuthorization();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+//app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 
