@@ -4,6 +4,7 @@
     {
         public string PartNo { get; set; }  
         public double Plan {  get; set; }   
+        public double PlanPrev {  get; set; }
         public double Do { get; set; }
         public double Stock { get; set; }
         public double PickList { get; set; }

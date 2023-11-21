@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+https://go.microsoft.com/fwlink/?LinkID=208121.
+-->
+<Project>
+  <PropertyGroup>
+    <_PublishTargetUrl>D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\publish\</_PublishTargetUrl>
+    <History>True|2023-11-21T08:47:49.1166752Z;True|2023-11-21T15:12:50.3533808+07:00;True|2023-11-21T14:39:22.0767564+07:00;True|2023-11-21T14:33:00.5402115+07:00;True|2023-11-21T14:02:04.7348825+07:00;True|2023-11-21T12:01:35.4038146+07:00;</History>
+    <LastFailureDetails />
+  </PropertyGroup>
+</Project>

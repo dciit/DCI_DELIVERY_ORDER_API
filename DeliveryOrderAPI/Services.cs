@@ -451,7 +451,7 @@ namespace DeliveryOrderAPI
             {
                 StockLoop = ItemStock.Stock;
             }
-            var FirstItem = res.OrderBy(x => x.Date).FirstOrDefault(x => x.Date.Date == dtNow.Date &&  x.Vender == vender && x.PartNo.Trim() == part);
+            var FirstItem = res.OrderBy(x => x.Date).FirstOrDefault(x => x.Date.Date == dtNow.Date && x.Vender == vender && x.PartNo.Trim() == part);
             var LastItem = res.OrderBy(x => x.Date).LastOrDefault(x => x.Vender == vender && x.PartNo.Trim() == part);
             if (FirstItem != null && LastItem != null)
             {
@@ -679,6 +679,7 @@ namespace DeliveryOrderAPI
                             if (itemHistory != null)
                             {
                                 itemResponse.Plan = (double)itemHistory.PlanVal!;
+                                itemResponse.PlanPrev = itemResponse.Plan;
                                 itemResponse.Do = (double)itemHistory.DoVal!;
                                 itemResponse.Stock = (double)itemHistory.StockVal!;
                             }
@@ -690,6 +691,12 @@ namespace DeliveryOrderAPI
                             if (itemHistory != null) // เอาประวัติมาแสดง
                             {
                                 itemResponse.Plan = (double)itemHistory.PlanVal!;
+                                itemResponse.PlanPrev = itemResponse.Plan;
+                                ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
+                                if (itemPlan != null && (itemResponse.Plan != (double)itemPlan.Qty!))
+                                {
+                                    itemResponse.Plan = (double)itemPlan.Qty!;
+                                }
                                 itemResponse.Do = (double)itemHistory.DoVal!;
                                 Stock = (Stock - itemResponse.Plan) + itemResponse.Do;
                                 itemResponse.Stock = Stock;
@@ -699,11 +706,13 @@ namespace DeliveryOrderAPI
                             else
                             {
                                 itemResponse.Plan = 0;
+                                itemResponse.PlanPrev = 0;
                                 itemResponse.PickList = 0;
                                 ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
                                 if (itemPlan != null)
                                 {
                                     itemResponse.Plan = (double)itemPlan.Qty!;
+                                    itemResponse.PlanPrev = itemResponse.Plan;
                                 }
 
                                 Stock -= itemResponse.Plan;
