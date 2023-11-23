@@ -646,7 +646,7 @@ namespace DeliveryOrderAPI
                     while (dtLoop <= dtEnd)
                     {
                         MRESULTDO itemResponse = new MRESULTDO();
-                        itemResponse.PartNo = Part;
+                        itemResponse.PartNo = $"{Part}";
                         itemResponse.Vender = vender;
                         itemResponse.Date = dtLoop;
                         MPickList itemPickList = PickLists.FirstOrDefault(x => x.Partno == Part && x.Idate == dtLoop.Date.ToString(YMDFormat))!;
