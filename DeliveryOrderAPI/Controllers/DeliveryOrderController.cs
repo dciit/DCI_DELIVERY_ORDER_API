@@ -108,10 +108,12 @@ namespace DeliveryOrderAPI.Controllers
             {
                 List<DoHistoryDev> listPrev = _contextDBSCM.DoHistoryDevs.Where(x => x.Revision == 999 && x.RunningCode == nbr && x.Rev != rev).ToList();
                 listPrev.ForEach(a => a.Revision = prev.Rev);
-
+                _contextDBSCM.SaveChanges();
+            }
+            if (insert > 0)
+            {
                 List<DoHistoryDev> listPrevDay = _contextDBSCM.DoHistoryDevs.Where(x => x.Revision == 999 && x.RunningCode != nbr).ToList();
-                listPrevDay.ForEach(a => a.Revision = prev.Rev);
-
+                listPrevDay.ForEach(a => a.Revision = 1);
                 _contextDBSCM.SaveChanges();
             }
             return Ok(new
