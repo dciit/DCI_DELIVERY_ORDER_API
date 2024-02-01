@@ -845,6 +845,7 @@ public partial class DBSCM : DbContext
                 .HasColumnName("VD_TIME_SCHEDULE_DELIVERY");
             entity.Property(e => e.VdTue).HasColumnName("VD_TUE");
             entity.Property(e => e.VdWed).HasColumnName("VD_WED");
+            entity.Property(e => e.VdProdLead).HasColumnName("VD_PROD_LEAD");
         });
 
         OnModelCreatingPartial(modelBuilder);

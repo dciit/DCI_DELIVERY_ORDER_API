@@ -22,7 +22,9 @@ public class OraConnectDB
         {
             connStr = @"Data Source=(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.214.123)(PORT = 1531)) (CONNECT_DATA = (SID = DCIOS01)));User Id=master;Password=master";
 
-        } else if (DBSource == "ALPHA02") {
+        }
+        else if (DBSource == "ALPHA02")
+        {
             connStr = @"Data Source=(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.214.124)(PORT = 1532)) (CONNECT_DATA = (SID = DCIOS02)));User Id=mc;Password=mc";
 
         }
@@ -60,6 +62,10 @@ public class OraConnectDB
                 Console.WriteLine(ex.ToString());
                 return dTable;
             }
+            finally
+            {
+                conn.Close();
+            }
 
         }
         else
@@ -95,6 +101,10 @@ public class OraConnectDB
                 Console.WriteLine(ex.ToString());
                 return dTable;
             }
+            finally
+            {
+                conn.Close();
+            }
 
         }
         else
@@ -125,6 +135,10 @@ public class OraConnectDB
             {
                 Console.WriteLine(ex.ToString());
             }
+            finally
+            {
+                conn.Close();
+            }
         }
 
     }
@@ -144,14 +158,15 @@ public class OraConnectDB
                 commandDb.Connection = conn;
                 conn.Open();
                 commandDb.ExecuteNonQuery();
-                conn.Close();
-
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.ToString());
             }
-
+            finally
+            {
+                conn.Close();
+            }
         }
     }
 

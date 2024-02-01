@@ -4,7 +4,8 @@
     {
         public int? id { get; set; }
         public int? index { get; set; }
-        public string? vdCode { get; set; }   
+        public string? vdCode { get; set; }  
+        
         public string? startDate { get; set; }
         public string? endDate { get; set; }
         public string? currentDate { get; set; }

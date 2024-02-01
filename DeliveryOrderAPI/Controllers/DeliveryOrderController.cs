@@ -5,6 +5,7 @@ using DeliveryOrderAPI.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.Data;
+
 namespace DeliveryOrderAPI.Controllers
 {
     [ApiController]
@@ -39,7 +40,7 @@ namespace DeliveryOrderAPI.Controllers
         private OraConnectDB dbAlpha2 = new("ALPHA02");
         private readonly DBSCM _contextDBSCM;
         private readonly DBHRM _contextDBHRM;
-        Services serv = new Services(new DBSCM());
+        Services serv = new Services(new DBSCM(),new DBHRM());
         DataTable dtPlanToday = new DataTable();
         DataTable PartMstr = new DataTable();
         //***********************************************************************//
@@ -62,7 +63,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/getPlans")]
         public async Task<IActionResult> getPlans([FromBody] MGetPlan param)
         {
-            MODEL_GET_DO response = serv.CalDO(false,param.vdCode!);
+            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param);
             return Ok(response);
         }
 
@@ -574,27 +575,31 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/getListBuyer")]
         public IActionResult GetListBuyer()
         {
-            var ListBuyer = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.RefCode != "").ToList();
-            var res = (from item in (from dict in ListBuyer
-                                     select new
-                                     {
-                                         code = dict.Code
-                                     }).GroupBy(x => x.code).ToList()
-                       join emp in _contextDBHRM.Employees
-                  on item.Key equals emp.Code
-                       select new
-                       {
-                           empcode = emp.Code,
-                           fullname = $"{emp.Pren!.ToUpper()}{emp.Name} {emp.Surn}"
-                       }).ToList();
-            return Ok(res);
+            //var ListBuyer = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.RefCode != "").ToList();
+            //var res = (from item in (from dict in ListBuyer
+            //                         select new
+            //                         {
+            //                             code = dict.Code
+            //                         }).GroupBy(x => x.code).ToList()
+            //           join emp in _contextDBHRM.Employees
+            //      on item.Key equals emp.Code
+            //           select new
+            //           {
+            //               empcode = emp.Code,
+            //               fullname = $"{emp.Pren!.ToUpper()}{emp.Name} {emp.Surn}"
+            //           }).ToList();
+            return Ok(serv.GetListBuyer());
         }
 
         [HttpPost]
         [Route("/getListSupplierByBuyer")]
         public IActionResult GetListSupplierByBuyer([FromBody] DoDictMstr param)
         {
-            List<DoDictMstr> suppliers = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == param.Code).ToList();
+            List<DoDictMstr> suppliers = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == param.Code && x.DictStatus == "999").ToList();
+            if (param.RefCode != "" && param.RefCode != null)
+            {
+                suppliers = suppliers.Where(x => x.RefCode == param.RefCode).ToList();
+            }
             var res = (from vd in suppliers
                        join vdMstr in _contextDBSCM.DoVenderMasters.ToList()
                        on vd.RefCode equals vdMstr.VdCode
@@ -604,6 +609,43 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                            vdname = vdMstr.VdDesc
                        }).ToList();
             return Ok(res);
+        }
+
+        [HttpGet]
+        [Route("/getVenderMasterOfVender/{vdcode}")]
+        public IActionResult GetVenderMasterOfVender(string vdcode)
+        {
+            var vdMaster = _contextDBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == vdcode);
+            return Ok(vdMaster);
+        }
+
+        [HttpGet]
+        [Route("/getVenderMasterOfVenders")]
+        public IActionResult GetVenderMasterOfVenders()
+        {
+            var vdMaster = _contextDBSCM.DoVenderMasters.ToList();
+            return Ok(vdMaster);
+        }
+
+        [HttpGet]
+        [Route("/getSupplier/{buyer}")]
+        public IActionResult GetSupplier(string buyer)
+        {
+            var supplierOfBuyer = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256" && x.DictStatus == "999").ToList();
+            var listSupplier = (from sp in supplierOfBuyer
+                                join spDict in _contextDBSCM.DoVenderMasters.ToList()
+                                on sp.RefCode equals spDict.VdCode
+                                select new DoVenderMaster
+                                {
+                                    VdCode = spDict.VdCode,
+                                    VdBox = spDict.VdBox,
+                                    VdDesc = spDict.VdDesc,
+                                    VdMinDelivery = spDict.VdMinDelivery,
+                                    VdMaxDelivery = spDict.VdMaxDelivery,
+                                    VdRound = spDict.VdRound,
+                                    VdProdLead = spDict.VdProdLead,
+                                });
+            return Ok(listSupplier);
         }
     }
 }

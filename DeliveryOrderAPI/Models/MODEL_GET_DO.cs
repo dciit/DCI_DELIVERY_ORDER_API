@@ -8,5 +8,7 @@
         public List<string> Holiday { get; set; }   
         public Dictionary<string,Dictionary<string,bool>> VenderDelivery { get; set; }  
         public List<DoVenderMaster> VenderMaster { get; set; }  
+        public List<DoVenderMaster> VenderSelected {  get; set; } 
+        public List<MPOAlpha01> ListPO { get; set; }
     }
 }

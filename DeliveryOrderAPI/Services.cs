@@ -15,6 +15,7 @@ namespace DeliveryOrderAPI
     public class Services
     {
         private readonly DBSCM _DBSCM;
+        private readonly DBHRM _DBHRM;
         private SqlConnectDB dbSCM = new("dbSCM");
         private OraConnectDB dbAlpha = new("ALPHA01");
         private OraConnectDB dbAlpha2 = new("ALPHA02");
@@ -22,6 +23,12 @@ namespace DeliveryOrderAPI
         public Services(DBSCM dBSCM)
         {
             _DBSCM = dBSCM;
+        }
+
+        public Services(DBSCM dBSCM, DBHRM dBHRM)
+        {
+            _DBSCM = dBSCM;
+            _DBHRM = dBHRM;
         }
 
         public double ConvDay(string valDay = "")
@@ -36,6 +43,24 @@ namespace DeliveryOrderAPI
             sql.CommandText = @"SELECT PART.*,VD.* FROM [dbSCM].[dbo].[DO_PART_MASTER] PART LEFT JOIN [dbSCM].[dbo].[DO_VENDER_MASTER] VD ON PART.VD_CODE = VD.VD_CODE WHERE PART.VD_CODE = '" + SupplierCode + "' ORDER BY PARTNO ASC";
             DataTable dt = dbSCM.Query(sql);
             return dt;
+        }
+
+        public List<MGetListBuyer> GetListBuyer()
+        {
+            var ListBuyer = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.RefCode != "").ToList();
+            List<MGetListBuyer> res = (from item in (from dict in ListBuyer
+                                                     select new
+                                                     {
+                                                         code = dict.Code
+                                                     }).GroupBy(x => x.code).ToList()
+                                       join emp in _DBHRM.Employees
+                                  on item.Key equals emp.Code
+                                       select new MGetListBuyer
+                                       {
+                                           empcode = emp.Code,
+                                           fullname = $"{emp.Pren!.ToUpper()}{emp.Name} {emp.Surn}"
+                                       }).ToList();
+            return res;
         }
 
 
@@ -250,21 +275,21 @@ namespace DeliveryOrderAPI
             return res;
         }
 
-        internal DateTime checkDelivery(DateTime dtDelivery, DataTable supplierMstr)
-        {
-            string shortDay = dtDelivery.ToString("ddd");
-            bool CanDelivery = Convert.ToBoolean(supplierMstr.Rows[0]["VD_" + shortDay].ToString());
-            if (!CanDelivery)
-            {
-                while (!CanDelivery)
-                {
-                    shortDay = dtDelivery.ToString("ddd");
-                    CanDelivery = Convert.ToBoolean(supplierMstr.Rows[0]["VD_" + shortDay].ToString());
-                    dtDelivery = dtDelivery.AddDays(-1);
-                }
-            }
-            return dtDelivery;
-        }
+        //internal DateTime checkDelivery(DateTime dtDelivery, DataTable supplierMstr)
+        //{
+        //    string shortDay = dtDelivery.ToString("ddd");
+        //    bool CanDelivery = Convert.ToBoolean(supplierMstr.Rows[0]["VD_" + shortDay].ToString());
+        //    if (!CanDelivery)
+        //    {
+        //        while (!CanDelivery)
+        //        {
+        //            shortDay = dtDelivery.ToString("ddd");
+        //            CanDelivery = Convert.ToBoolean(supplierMstr.Rows[0]["VD_" + shortDay].ToString());
+        //            dtDelivery = dtDelivery.AddDays(-1);
+        //        }
+        //    }
+        //    return dtDelivery;
+        //}
 
         internal DataTable GetSupplierMaster(string? supplierCode)
         {
@@ -592,10 +617,28 @@ namespace DeliveryOrderAPI
             return response;
         }
 
-
-        public MODEL_GET_DO CalDO(bool run, string vdcode = "")
+        public MODEL_GET_DO CalDO(bool run, string vdcode = "", MGetPlan param = null)
         {
+            List<MPOAlpha01> rPOFIFO = new List<MPOAlpha01>();
             vdcode = vdcode != null ? vdcode : "";
+            string buyer = param != null ? param.buyer : "";
+            List<DoVenderMaster> oVenderSelect = new List<DoVenderMaster>();
+            if (vdcode == "" && !run)
+            {
+                List<DoDictMstr> listVender = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == buyer).ToList();
+                if (listVender.Count > 0)
+                {
+                    oVenderSelect = _DBSCM.DoVenderMasters.Where(x => x.VdCode == listVender[0].RefCode).ToList();
+                    if (oVenderSelect.Count > 0)
+                    {
+                        vdcode = oVenderSelect[0].VdCode;
+                    }
+                }
+            }
+            else
+            {
+                oVenderSelect = _DBSCM.DoVenderMasters.Where(x => x.VdCode == vdcode).ToList();
+            }
             string YMDFormat = "yyyyMMdd";
             string nbr = "";
             List<MRESULTDO> DOITEM = new List<MRESULTDO>();
@@ -614,7 +657,7 @@ namespace DeliveryOrderAPI
                 int rev = (int)Historys.FirstOrDefault()!.Rev!;
                 nbr = $"{Historys.FirstOrDefault()!.RunningCode}{rev.ToString("D3")}";
             }
-            List<DoDictMstr> ListVenderOfBuyer = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256").ToList();
+            List<DoDictMstr> ListVenderOfBuyer = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256" && x.DictStatus == "999").ToList();
             if (vdcode != "")
             {
                 ListVenderOfBuyer = ListVenderOfBuyer.Where(x => x.RefCode == vdcode).ToList();
@@ -623,10 +666,17 @@ namespace DeliveryOrderAPI
             {
                 string vender = itemVender.RefCode!;
                 DoVenderMaster VenderMaster = _DBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == vender)!;
+                if (VenderMaster != null)
+                {
+                    int VdProdLead = Convert.ToInt32(VenderMaster.VdProdLead) - 1;
+                    dtRun = dtNow.AddDays(VdProdLead);
+                    dtEnd = dtNow.AddDays(VdProdLead + dRun);
+                }
                 Dictionary<string, bool> VenderDelivery = getDaysDelivery(VenderMaster);
                 if (!VenderDeliveryMaster.ContainsKey(vender)) { VenderDeliveryMaster.Add(vender, VenderDelivery); }
                 List<ViDoPlan> Plans = GetPlans(vender, dtNow, dtEnd);
                 List<DoPartMaster> Parts = GetPartByVenderCode(vender);
+                //Parts = Parts.Where(x => x.Partno == "3PC08565-1").ToList();
                 PARTMASTER.AddRange(Parts);
                 VENDERMASTER.Add(VenderMaster);
                 string PartJoin = string.Join("','", Parts.GroupBy(x => x.Partno).Select(y => y.Key).ToList());
@@ -638,6 +688,10 @@ namespace DeliveryOrderAPI
                 foreach (DoPartMaster itemPart in Parts)
                 {
                     string Part = itemPart.Partno.Trim();
+                    //if (Part == "4P726770-1")
+                    //{
+                    //    Console.WriteLine("123");
+                    //}
                     string Cm = itemPart.Cm;
                     if (Plans.FirstOrDefault(x => x.Partno == Part) != null) { Cm = Plans.FirstOrDefault(x => x.Partno == Part)!.Cm!; }
                     int Pdlt = (int)itemPart.Pdlt!;
@@ -731,15 +785,52 @@ namespace DeliveryOrderAPI
                         dtLoop = dtLoop.AddDays(1);
                     }
                 }
+    
+                OracleCommand strGetPo = new OracleCommand();
+                strGetPo.CommandText = @"SELECT C.HTCODE, G.PONO, G.ITEMNO, 
+                                           G.PARTNO, G.BRUSN, 
+                                           G.DELYMD,  
+                                           C.ODRYMD, G.CALYMD,G.RCSYMD, 
+                                           G.RCCYMD, 
+                                           G.WHUM, G.WHQTY,  G.WHBLQTY, G.WHBLBQTY, 
+                                           G.IVUM, G.IVQTY,  G.IVBLQTY, G.IVBLBQTY,    
+                                           G.APBIT 
+                                        FROM MASTER.GST_DATOSD G
+                                        LEFT JOIN MASTER.GST_DATOSC C ON C.PONO = G.PONO 
+                                        WHERE G.jibu = '64'   
+                                          and itemno like '%' 
+                                          and APBIT IN ('U','P')
+                                          and C.htcode = :htcode";
+                strGetPo.Parameters.Add(new OracleParameter(":htcode", vender));
+                DataTable dt = dbAlpha.Query(strGetPo);
+                foreach (DataRow dr in dt.Rows)
+                {
+                    MPOAlpha01 iPOFIFO = new MPOAlpha01();
+                    iPOFIFO.pono = dr["PONO"].ToString();
+                    iPOFIFO.itemno = dr["ITEMNO"].ToString();
+                    iPOFIFO.htcode = dr["HTCODE"].ToString();
+                    iPOFIFO.whqty = dr["WHQTY"].ToString();
+                    iPOFIFO.whblbqty = Convert.ToDouble(dr["WHBLBQTY"].ToString());
+                    iPOFIFO.whblqty = Convert.ToDouble(dr["WHBLQTY"].ToString());
+                    iPOFIFO.partno = dr["PARTNO"].ToString().Trim();
+                    iPOFIFO.brusn = dr["BRUSN"].ToString();
+                    iPOFIFO.delymd = dr["DELYMD"].ToString();
+                    rPOFIFO.Add(iPOFIFO);
+                }
             }
             //List<DoDictMstr> HOLIDAY = _GET_HOLIDAY();
+
+
+
             return new MODEL_GET_DO()
             {
                 data = DOITEM,
                 PartMaster = PARTMASTER,
                 VenderMaster = VENDERMASTER,
                 nbr = nbr,
-                VenderDelivery = VenderDeliveryMaster
+                VenderDelivery = VenderDeliveryMaster,
+                VenderSelected = oVenderSelect,
+                ListPO = rPOFIFO.OrderBy(x => x.delymd).ToList()
             };
         }
 

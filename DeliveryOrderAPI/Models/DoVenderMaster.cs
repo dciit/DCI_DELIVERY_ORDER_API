@@ -96,4 +96,5 @@ public partial class DoVenderMaster
     public bool? VdDay31 { get; set; }
 
     public string? VdTimeScheduleDelivery { get; set; }
+    public int? VdProdLead { get; set; }
 }
