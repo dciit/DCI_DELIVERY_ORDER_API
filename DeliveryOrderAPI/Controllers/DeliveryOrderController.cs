@@ -77,6 +77,7 @@ namespace DeliveryOrderAPI.Controllers
             string nbr = dtNow.ToString("yyyyMMdd");
             int rev = 0;
             MODEL_GET_DO GroupDO = serv.CalDO(true);
+            //return Ok();
             DoHistoryDev prev = _contextDBSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
             if (prev != null)
             {

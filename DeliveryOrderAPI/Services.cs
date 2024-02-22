@@ -575,11 +575,17 @@ namespace DeliveryOrderAPI
             MRESULTDO LastItemOfPart = response.OrderBy(x => x.Date).LastOrDefault(x => x.Vender == vender && x.PartNo == part)!;
             dtLoop = dtLoop.AddDays(pdlt * (-1));
             DateTime dtNow = DateTime.Now;
+            TimeSpan timeNow = DateTime.Now.TimeOfDay;
+            TimeSpan timeFix = new TimeSpan(15,10,0);
+            //if (timeNow < timeFix)
+            //{
+            //    Console.WriteLine("123123");
+            //}
             if (dtLoop < dtNow)
             {
                 dtLoop = dtNow;
             }
-            if (haveHistory && dtLoop < dtRun)
+            if (haveHistory && dtLoop < dtRun )
             {
                 dtLoop = dtRun;
             }
@@ -609,11 +615,41 @@ namespace DeliveryOrderAPI
                     CanDelivery = venderDelivery.ContainsKey(ShortDay) ? venderDelivery[ShortDay.ToUpper()] : false;
                 }
             }
-            int index = response.FindIndex(x => x.Vender == vender && x.PartNo == part && x.Date.ToString(YMDFormat) == dtLoop.ToString(YMDFormat));
-            if (index != -1)
+
+            if (dtLoop.ToString("yyyyMMdd") == dtNow.ToString("yyyyMMdd"))
             {
-                response[index].Do += DO;
+                if (timeNow < timeFix)
+                {
+                    int index = response.FindIndex(x => x.Vender == vender && x.PartNo == part && x.Date.ToString(YMDFormat) == dtLoop.ToString(YMDFormat));
+                    if (index != -1)
+                    {
+                        response[index].Do += DO;
+                    }
+                }
             }
+            else
+            {
+                if (dtLoop > dtRun) // ต้องเป็นวันที่มากกว่า วัน Fixed ถึงจะ Adj D/O value
+                {
+                    int index = response.FindIndex(x => x.Vender == vender && x.PartNo == part && x.Date.ToString(YMDFormat) == dtLoop.ToString(YMDFormat));
+                    if (index != -1)
+                    {
+                        response[index].Do += DO;
+                    }
+                }
+                else if(dtLoop.ToString("yyyyMMdd") == dtRun.ToString("yyyyMMdd"))
+                {
+                    if (timeNow < timeFix)
+                    {
+                        int index = response.FindIndex(x => x.Vender == vender && x.PartNo == part && x.Date.ToString(YMDFormat) == dtLoop.ToString(YMDFormat));
+                        if (index != -1)
+                        {
+                            response[index].Do += DO;
+                        }
+                    }
+                }
+            }
+            
             return response;
         }
 
@@ -639,6 +675,7 @@ namespace DeliveryOrderAPI
             {
                 oVenderSelect = _DBSCM.DoVenderMasters.Where(x => x.VdCode == vdcode).ToList();
             }
+         
             string YMDFormat = "yyyyMMdd";
             string nbr = "";
             List<MRESULTDO> DOITEM = new List<MRESULTDO>();
@@ -665,6 +702,7 @@ namespace DeliveryOrderAPI
             foreach (DoDictMstr itemVender in ListVenderOfBuyer)
             {
                 string vender = itemVender.RefCode!;
+                
                 DoVenderMaster VenderMaster = _DBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == vender)!;
                 if (VenderMaster != null)
                 {
@@ -688,7 +726,7 @@ namespace DeliveryOrderAPI
                 foreach (DoPartMaster itemPart in Parts)
                 {
                     string Part = itemPart.Partno.Trim();
-                    //if (Part == "4P726770-1")
+                    //if (Part == "2P488052-1")
                     //{
                     //    Console.WriteLine("123");
                     //}
@@ -703,6 +741,7 @@ namespace DeliveryOrderAPI
                         itemResponse.PartNo = $"{Part}";
                         itemResponse.Vender = vender;
                         itemResponse.Date = dtLoop;
+                       
                         MPickList itemPickList = PickLists.FirstOrDefault(x => x.Partno == Part && x.Idate == dtLoop.Date.ToString(YMDFormat))!;
                         if (itemPickList != null)
                         {
@@ -742,16 +781,27 @@ namespace DeliveryOrderAPI
                         else
                         {
                             DoHistoryDev itemHistory = (dtLoop.Date >= dtNow.Date && dtLoop.Date <= dtRun.Date) ? Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part)! : null!;
+                            
                             if (itemHistory != null) // เอาประวัติมาแสดง
                             {
+                                if ((vender == "035019" && Part == "2P473200-1" && dtLoop.ToString(YMDFormat) == "20240301"))
+                                {
+                                    itemResponse.Plan = 3000;
+                                }
                                 itemResponse.Plan = (double)itemHistory.PlanVal!;
                                 itemResponse.PlanPrev = itemResponse.Plan;
                                 ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
+                                //if (Part == "4PD05765-1" && dtLoop.ToString(YMDFormat) == "20240213")
+                                //{
+                                //    itemPlan.Qty = 1048;
+                                //    Console.WriteLine("123");
+                                //}
                                 if (itemPlan != null && (itemResponse.Plan != (double)itemPlan.Qty!))
                                 {
                                     itemResponse.Plan = (double)itemPlan.Qty!;
                                 }
                                 itemResponse.Do = (double)itemHistory.DoVal!;
+                              
                                 Stock = (Stock - itemResponse.Plan) + itemResponse.Do;
                                 itemResponse.Stock = Stock;
                                 itemResponse.Wip = 0;
@@ -768,7 +818,10 @@ namespace DeliveryOrderAPI
                                     itemResponse.Plan = (double)itemPlan.Qty!;
                                     itemResponse.PlanPrev = itemResponse.Plan;
                                 }
-
+                                //if ((vender == "035019" && Part == "2P473200-1" && dtLoop.ToString(YMDFormat) == "20240304"))
+                                //{
+                                //    itemResponse.Plan = 3000;
+                                //}
                                 Stock -= itemResponse.Plan;
                                 itemResponse.Stock = Stock;
                                 DOITEM.Add(itemResponse);
