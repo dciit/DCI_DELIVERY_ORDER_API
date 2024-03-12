@@ -40,7 +40,7 @@ namespace DeliveryOrderAPI.Controllers
         private OraConnectDB dbAlpha2 = new("ALPHA02");
         private readonly DBSCM _contextDBSCM;
         private readonly DBHRM _contextDBHRM;
-        Services serv = new Services(new DBSCM(),new DBHRM());
+        Services serv = new Services(new DBSCM(), new DBHRM());
         DataTable dtPlanToday = new DataTable();
         DataTable PartMstr = new DataTable();
         //***********************************************************************//
@@ -647,6 +647,91 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                                     VdProdLead = spDict.VdProdLead,
                                 });
             return Ok(listSupplier);
+        }
+
+        [HttpPost]
+        [Route("/DOLog")]
+        public IActionResult editDOLog([FromBody] MEditDO param)
+        {
+            List<MDOLog> res = new List<MDOLog>();
+            string runningCode = param.runningCode;
+            if (runningCode.Length == 11)
+            {
+                runningCode = runningCode.Substring(0, 8);
+            }
+            string partNo = param.partno;
+            string ymd = param.ymd;
+            SqlCommand sql = new SqlCommand();
+            sql.CommandText = @"SELECT * FROM [dbo].[DO_LOG] WHERE RUNNING_CODE = '" + runningCode + " ' AND PARTNO =  '" + partNo + " ' AND DATE_VAL =  '" + ymd + " '  order by DT_INSERT DESC";
+            DataTable dt = dbSCM.Query(sql);
+            foreach (DataRow dr in dt.Rows)
+            {
+                MDOLog item = new MDOLog();
+                item.runningCode = dr["RUNNING_CODE"].ToString();
+                item.partNo = dr["PARTNO"].ToString();
+                item.dateVal = dr["DATE_VAL"].ToString();
+                item.prevDO = double.Parse(dr["PREV_DO"].ToString());
+                item.doVal = double.Parse(dr["DO"].ToString());
+                item.status = dr["STATUS"].ToString();
+                item.dtInsert = DateTime.Parse(dr["DT_INSERT"].ToString());
+                item.dtUpdate = DateTime.Parse(dr["DT_UPDATE"].ToString());
+                item.updateBy = dr["UPDATE_BY"].ToString();
+                res.Add(item);
+            }
+            return Ok(res);
+        }
+
+        [HttpPost]
+        [Route("/editDO")]
+        public IActionResult EditDO([FromBody] MEditDO param)
+        {
+            int update = 0;
+            string runningCode = param.runningCode;
+            if (runningCode.Length == 11)
+            {
+                runningCode = runningCode.Substring(0, 8);
+            }
+            string partNo = param.partno;
+            string ymd = param.ymd;
+            string empCode = param.empCode;
+            double doVal = param.doVal;
+            double doPrev = param.doPrev;
+            List<DoHistoryDev> PrevContent = _contextDBSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
+            if (PrevContent.Count > 0)
+            {
+                DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
+                PrevItem.DoVal = doVal;
+                _contextDBSCM.DoHistoryDevs.Update(PrevItem);
+                update = _contextDBSCM.SaveChanges();
+                if (update > 0)
+                {
+                    SqlCommand sql = new SqlCommand();
+                    sql.CommandText = @"INSERT [dbo].[DO_LOG]  (
+            [RUNNING_CODE]
+           ,[PARTNO]
+           ,[DATE_VAL]
+           ,[PREV_DO]
+           ,[DO]
+           ,[STATUS]
+           ,[DT_INSERT]
+           ,[DT_UPDATE]
+           ,[UPDATE_BY]) VALUES ('" + runningCode + "','" + partNo + "','" + ymd + "','" + doPrev + "','" + doVal + "','CHANGE_DO','" + DateTime.Now + "','" + DateTime.Now + "','" + empCode + "')";
+                    //sql.Parameters.Add(new SqlParameter(":RUNNING_CODE", runningCode));
+                    //sql.Parameters.Add(new SqlParameter(":PARTNO", partNo));
+                    //sql.Parameters.Add(new SqlParameter(":DATE_VAL", ymd));
+                    //sql.Parameters.Add(new SqlParameter(":PREV_DO", doPrev));
+                    //sql.Parameters.Add(new SqlParameter(":DO", doVal));
+                    //sql.Parameters.Add(new SqlParameter(":STATUS", "CHANGE_DO"));
+                    //sql.Parameters.Add(new SqlParameter(":DT_INSERT", DateTime.Now));
+                    //sql.Parameters.Add(new SqlParameter(":DT_UPDATE", DateTime.Now));
+                    //sql.Parameters.Add(new SqlParameter(":UPDATE_BY", empCode));
+                    DataTable dt = dbSCM.Query(sql);
+                }
+            }
+            return Ok(new
+            {
+                status = update
+            });
         }
     }
 }
