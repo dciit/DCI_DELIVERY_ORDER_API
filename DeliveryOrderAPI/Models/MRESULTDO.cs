@@ -13,5 +13,8 @@
         public double PO {  get; set; } 
         public double Wip { get; set; } 
         public DateTime Date { get; set; }  
+        public double POFIFO { get; set; }
+        public bool holiday { get; set; } = false;
+        public List<DoLogDev>? Log { get; set; } = new List<DoLogDev>();
     }
 }

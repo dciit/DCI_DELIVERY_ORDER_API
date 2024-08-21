@@ -6,6 +6,7 @@
         public int min { get; set; }
         public int max { get; set; }
         public int round { get; set; }
-        public string timeSchedule { get; set; }    
+        //public string timeSchedule { get; set; }    
+        public bool vdBoxPeriod { get; set; } = false;
     }
 }

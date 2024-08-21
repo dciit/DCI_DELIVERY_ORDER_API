@@ -11,6 +11,8 @@ public partial class DoPartMaster
 
     public string Cm { get; set; } = null!;
 
+    public string? Diameter { get; set; }
+
     public string? VdCode { get; set; }
 
     public string? Description { get; set; }
@@ -24,4 +26,10 @@ public partial class DoPartMaster
     public int? BoxMax { get; set; }
 
     public int? BoxQty { get; set; }
+
+    public DateTime? UpdateDate { get; set; }
+
+    public string? UpdateBy { get; set; }
+
+    public string? Active { get; set; }
 }

@@ -22,6 +22,4 @@ public partial class DoDictMstr
     public DateTime? UpdateDate { get; set; }
 
     public string? DictStatus { get; set; }
-
-   
 }

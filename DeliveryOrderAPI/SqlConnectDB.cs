@@ -154,6 +154,31 @@ public class SqlConnectDB
 
     }
 
+     public int ExecuteNonCommand(SqlCommand commandDb)
+    {
+        int result = 0;
+        if (useDB)
+        {
+            SqlConnection conn = new SqlConnection(connStr);
+            try
+            {
+                commandDb.Connection = conn;
+                conn.Open();
+                result = commandDb.ExecuteNonQuery();
+                conn.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+            finally
+            {
+                conn.Close();
+            }
+        }
+        return result;
+    }
+   
     /// <summary>
     /// ExecuteCommand
     /// </summary>

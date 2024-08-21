@@ -13,6 +13,8 @@ public partial class DoVenderMaster
 
     public double? VdBox { get; set; }
 
+    public bool? VdBoxPeriod { get; set; }
+
     public int? VdRound { get; set; }
 
     public double? VdMinDelivery { get; set; }
@@ -96,5 +98,6 @@ public partial class DoVenderMaster
     public bool? VdDay31 { get; set; }
 
     public string? VdTimeScheduleDelivery { get; set; }
+
     public int? VdProdLead { get; set; }
 }

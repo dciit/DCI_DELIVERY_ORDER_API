@@ -3,6 +3,7 @@
     public class MEditDO
     {
         public string runningCode { get; set; }
+        public int doRev { get; set; }  
         public string ymd { get; set; }
         public string partno { get; set; }
         public double doVal { get; set; }

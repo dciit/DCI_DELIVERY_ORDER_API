@@ -4,6 +4,7 @@ using DeliveryOrderAPI.Contexts;
 using DeliveryOrderAPI.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using System;
 using System.Data;
 
 namespace DeliveryOrderAPI.Controllers
@@ -52,6 +53,7 @@ namespace DeliveryOrderAPI.Controllers
         //                          EN -- NEW VERSION USE MODEL ONLY                   //
         //***********************************************************************//
         Dictionary<string, DoVenderMaster> DoVenderMasters = new Dictionary<string, DoVenderMaster>();
+        Helper oHelper = new Helper();
         public DeliveryOrderController(DBSCM contextDBSCM, DBHRM contextDBHRM)
         {
             _contextDBSCM = contextDBSCM;
@@ -59,31 +61,28 @@ namespace DeliveryOrderAPI.Controllers
         }
 
         [HttpPost]
-        //[Authorize]
         [Route("/getPlans")]
-        public async Task<IActionResult> getPlans([FromBody] MGetPlan param)
+        public IActionResult getPlans([FromBody] MGetPlan param)
         {
-            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param);
+            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param, "", 0);
             return Ok(response);
         }
 
         [HttpGet]
         [Route("/insertDO/{buyer}")]
-        //public async Task<IActionResult> InsertDO([FromBody] MRUNDO param)
         public async Task<IActionResult> InsertDO(string buyer = "41256")
         {
             string YMDFormat = "yyyyMMdd";
             DateTime dtNow = DateTime.Now;
             string nbr = dtNow.ToString("yyyyMMdd");
             int rev = 0;
-            MODEL_GET_DO GroupDO = serv.CalDO(true);
-            //return Ok();
             DoHistoryDev prev = _contextDBSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
             if (prev != null)
             {
                 rev = (int)prev.Rev!;
             }
             rev++;
+            MODEL_GET_DO GroupDO = serv.CalDO(true, "", null, nbr, rev);
             foreach (MRESULTDO itemDO in GroupDO.data)
             {
                 DoHistoryDev item = new DoHistoryDev()
@@ -138,131 +137,132 @@ namespace DeliveryOrderAPI.Controllers
             int status = 1;
             var dataAfterUpdate = (dynamic)null;
             string message = "";
-            double? DoEdit = Convert.ToInt32(param.doEdit);
-            var PartData = _contextDBSCM.DoHistories.Where(x => x.Id == param.id).FirstOrDefault();
-            if (param.doEdit < PartData.DoVal)
+            double? DoEdit = oHelper.ConvDBToInt(param.doEdit);
+            List<DoHistory> rHistory = _contextDBSCM.DoHistories.Where(x => x.Id == param.id).ToList();
+            if (rHistory.Count > 0)
             {
-                DateTime DateStart = DateTime.ParseExact(PartData.RunningCode, "yyyyMMdd", null);
-                DateTime DateLoop = DateTime.ParseExact(PartData.DateVal, "yyyyMMdd", null);
-                DateTime FixedDate = DateStart.AddDays(7);
-                bool firstTime = true;
-                if (DateLoop >= DateStart && DateLoop <= FixedDate)
+                DoHistory oHistory = rHistory.FirstOrDefault();
+                if (oHistory != null && param.doEdit < oHistory.DoVal)
                 {
-                    double StockSim = 0;
-                    double PlanVal = (double)PartData.PlanVal;
-                    double doVal = 0;
-                    //doVal = (double)DoEdit - (double)doVal;
-                    if (firstTime)
+                    DateTime DateStart = DateTime.ParseExact(oHistory.RunningCode, "yyyyMMdd", null);
+                    DateTime DateLoop = DateTime.ParseExact(oHistory.DateVal, "yyyyMMdd", null);
+                    DateTime FixedDate = DateStart.AddDays(7);
+                    bool firstTime = true;
+                    if (DateLoop >= DateStart && DateLoop <= FixedDate)
                     {
-                        double diffDO = (double)DoEdit - (double)PartData.DoVal;
-                        StockSim = (double)PartData.StockVal;
-                        StockSim = StockSim - Math.Abs(diffDO);
-                        firstTime = false;
-                    }
-                    while (DateLoop <= FixedDate)
-                    {
-                        if (StockSim < 0)
+                        double StockSim = 0;
+                        double PlanVal = oHelper.ConvDBEmptyToDB(oHistory.PlanVal);
+                        if (firstTime)
                         {
-                            status = 0;
-                            message = "ไม่สามารถลบจำนวน D/O ได้ เนื่องจาก ทำให้ยอดติดลบภายในช่วงวันที่ระบบกำหนดไว้";
-                            break;
+                            double diffDO = (double)DoEdit - (double)oHistory.DoVal;
+                            StockSim = oHelper.ConvDBEmptyToDB(oHistory.StockVal);
+                            StockSim = StockSim - Math.Abs(diffDO);
+                            firstTime = false;
                         }
-                        DateLoop = DateLoop.AddDays(1);
-                        PartData = _contextDBSCM.DoHistories.Where(x => x.DateVal == DateLoop.ToString("yyyyMMdd") && x.RunningCode == DateStart.ToString("yyyyMMdd") && x.Rev == PartData.Rev && x.Partno == param.partNo).FirstOrDefault();
-                        PlanVal = (double)PartData.PlanVal;
-                        double DoVal = (double)PartData.DoVal;
-                        StockSim = (StockSim + (double)DoVal) - PlanVal;
-                    }
-                }
-            }
-            if (status != 0)
-            {
-                var context = _contextDBSCM.DoHistories.Where(x => x.Id == param.id).FirstOrDefault();
-                if (context != null)
-                {
-                    SqlCommand sql = new SqlCommand();
-                    sql.CommandText = @"SELECT * FROM [dbSCM].[dbo].[DO_HISTORY] WHERE RUNNING_CODE = @RUNNING_CODE AND REV = @REV AND PARTNO = @PARTNO AND REVISION = 999 ORDER BY ID ASC";
-                    sql.Parameters.Add(new SqlParameter("@RUNNING_CODE", context.RunningCode));
-                    sql.Parameters.Add(new SqlParameter("@REV", context.Rev));
-                    sql.Parameters.Add(new SqlParameter("@PARTNO", context.Partno));
-                    DataTable dt = dbSCM.Query(sql);
-                    foreach (DataRow dr in dt.Rows)
-                    {
-                        int? Id = Convert.ToInt32(dr["ID"].ToString());
-                        int? Rev = Convert.ToInt32(dr["REV"].ToString());
-                        double? PlanVal = Convert.ToDouble(dr["PLAN_VAL"].ToString());
-                        double? StockVal = Convert.ToDouble(dr["STOCK_VAL"].ToString());
-                        double? StockDefault = Convert.ToDouble(dr["STOCK"].ToString());
-                        double? DoVal = Convert.ToDouble(dr["DO_VAL"].ToString());
-                        string? RunningCode = dr["RUNNING_CODE"].ToString();
-                        string? DateVal = dr["DATE_VAL"].ToString();
-                        string? PartNo = dr["PARTNO"].ToString();
-                        //double? DoEdit = Convert.ToInt32(param.doEdit);
-                        if (Id == param.id || Id > param.id)
+                        while (DateLoop <= FixedDate)
                         {
-                            if (Id == param.id && DoEdit == DoVal)
+                            if (StockSim < 0)
                             {
+                                status = 0;
+                                message = "ไม่สามารถลบจำนวน D/O ได้ เนื่องจาก ทำให้ยอดติดลบภายในช่วงวันที่ระบบกำหนดไว้";
                                 break;
                             }
-                            int CountItem = _contextDBSCM.DoHistories.Where(x => x.RunningCode == RunningCode && x.Rev == Rev && x.DateVal == DateVal && x.Partno == PartNo).ToList().Count();
-                            SqlCommand sqlUpdate = new SqlCommand();
-                            sqlUpdate.CommandText = @"UPDATE [dbo].[DO_HISTORY] SET [REVISION] = @REVISION WHERE ID = @ID";
-                            sqlUpdate.Parameters.Add(new SqlParameter("@REVISION", CountItem));
-                            sqlUpdate.Parameters.Add(new SqlParameter("@ID", Id));
-                            dbSCM.Query(sqlUpdate);
-                            if (Id == param.id)
-                            {
-                                if (DoEdit > DoVal)
-                                {
-                                    stock = StockVal + (DoEdit - DoVal);
-                                }
-                                else if (DoEdit < DoVal)
-                                {
-                                    stock = StockVal;
-                                    stock = stock - (DoVal - DoEdit);
-                                }
-                                _do = DoEdit;
-                                SqlCommand sqlInsert = new SqlCommand();
-                                sqlInsert.CommandText = @"INSERT INTO [dbo].[DO_HISTORY]([RUNNING_CODE],[REV],[PARTNO],[DATE_VAL],[PLAN_VAL],[DO_VAL],[STOCK_VAL],[STOCK],[VD_CODE],[INSERT_DT],[INSERT_BY],[STATUS],[REVISION]) VALUES (@RUNNING_CODE,@REV,@PARTNO,@DATE_VAL,@PLAN_VAL,@DO_VAL,@STOCK_VAL,@STOCK,@VD_CODE,@INSERT_DATE,@INSERT_BY,@STATUS,@REVISION)";
-                                sqlInsert.Parameters.Add(new SqlParameter("@RUNNING_CODE", RunningCode));
-                                sqlInsert.Parameters.Add(new SqlParameter("@REV", Rev));
-                                sqlInsert.Parameters.Add(new SqlParameter("@PARTNO", PartNo));
-                                sqlInsert.Parameters.Add(new SqlParameter("@DATE_VAL", DateVal));
-                                sqlInsert.Parameters.Add(new SqlParameter("@PLAN_VAL", dr["PLAN_VAL"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@DO_VAL", _do));
-                                sqlInsert.Parameters.Add(new SqlParameter("@STOCK_VAL", stock));
-                                sqlInsert.Parameters.Add(new SqlParameter("@STOCK", StockDefault));
-                                sqlInsert.Parameters.Add(new SqlParameter("@VD_CODE", dr["VD_CODE"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@INSERT_DATE", DateTime.Now));
-                                sqlInsert.Parameters.Add(new SqlParameter("@INSERT_BY", dr["INSERT_BY"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@STATUS", dr["STATUS"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@REVISION", 999));
-                                dbSCM.Query(sqlInsert);
-                            }
-                            else if (Id > param.id)
-                            {
-                                stock = (stock + DoVal) - PlanVal;
-                                SqlCommand sqlInsert = new SqlCommand();
-                                sqlInsert.CommandText = @"INSERT INTO [dbo].[DO_HISTORY]([RUNNING_CODE],[REV],[PARTNO],[DATE_VAL],[PLAN_VAL],[DO_VAL],[STOCK_VAL],[STOCK],[VD_CODE],[INSERT_DT],[INSERT_BY],[STATUS],[REVISION]) VALUES (@RUNNING_CODE,@REV,@PARTNO,@DATE_VAL,@PLAN_VAL,@DO_VAL,@STOCK_VAL,@STOCK,@VD_CODE,@INSERT_DATE,@INSERT_BY,@STATUS,@REVISION)";
-                                sqlInsert.Parameters.Add(new SqlParameter("@RUNNING_CODE", RunningCode));
-                                sqlInsert.Parameters.Add(new SqlParameter("@REV", Rev));
-                                sqlInsert.Parameters.Add(new SqlParameter("@PARTNO", PartNo));
-                                sqlInsert.Parameters.Add(new SqlParameter("@DATE_VAL", DateVal));
-                                sqlInsert.Parameters.Add(new SqlParameter("@PLAN_VAL", dr["PLAN_VAL"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@DO_VAL", DoVal));
-                                sqlInsert.Parameters.Add(new SqlParameter("@STOCK_VAL", stock));
-                                sqlInsert.Parameters.Add(new SqlParameter("@STOCK", StockDefault));
-                                sqlInsert.Parameters.Add(new SqlParameter("@VD_CODE", dr["VD_CODE"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@INSERT_DATE", DateTime.Now));
-                                sqlInsert.Parameters.Add(new SqlParameter("@INSERT_BY", dr["INSERT_BY"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@STATUS", dr["STATUS"].ToString()));
-                                sqlInsert.Parameters.Add(new SqlParameter("@REVISION", 999));
-                                dbSCM.Query(sqlInsert);
-                            }
+                            DateLoop = DateLoop.AddDays(1);
+                            oHistory = _contextDBSCM.DoHistories.Where(x => x.DateVal == DateLoop.ToString("yyyyMMdd") && x.RunningCode == DateStart.ToString("yyyyMMdd") && x.Rev == oHistory.Rev && x.Partno == param.partNo).FirstOrDefault();
+                            PlanVal = oHelper.ConvDBEmptyToDB(oHistory.PlanVal);
+                            double DoVal = oHelper.ConvDBEmptyToDB(oHistory.DoVal);
+                            StockSim = (StockSim + oHelper.ConvDBEmptyToDB(DoVal)) - PlanVal;
                         }
                     }
                 }
-                dataAfterUpdate = _contextDBSCM.DoHistories.Where(x => x.Id >= param.id && x.Revision == 999).ToList();
+                if (status != 0)
+                {
+                    var context = _contextDBSCM.DoHistories.Where(x => x.Id == param.id).FirstOrDefault();
+                    if (context != null)
+                    {
+                        SqlCommand sql = new SqlCommand();
+                        sql.CommandText = @"SELECT * FROM [dbSCM].[dbo].[DO_HISTORY] WHERE RUNNING_CODE = @RUNNING_CODE AND REV = @REV AND PARTNO = @PARTNO AND REVISION = 999 ORDER BY ID ASC";
+                        sql.Parameters.Add(new SqlParameter("@RUNNING_CODE", context.RunningCode));
+                        sql.Parameters.Add(new SqlParameter("@REV", context.Rev));
+                        sql.Parameters.Add(new SqlParameter("@PARTNO", context.Partno));
+                        DataTable dt = dbSCM.Query(sql);
+                        foreach (DataRow dr in dt.Rows)
+                        {
+                            int? Id = Convert.ToInt32(dr["ID"].ToString());
+                            int? Rev = Convert.ToInt32(dr["REV"].ToString());
+                            double? PlanVal = Convert.ToDouble(dr["PLAN_VAL"].ToString());
+                            double? StockVal = Convert.ToDouble(dr["STOCK_VAL"].ToString());
+                            double? StockDefault = Convert.ToDouble(dr["STOCK"].ToString());
+                            double? DoVal = Convert.ToDouble(dr["DO_VAL"].ToString());
+                            string? RunningCode = dr["RUNNING_CODE"].ToString();
+                            string? DateVal = dr["DATE_VAL"].ToString();
+                            string? PartNo = dr["PARTNO"].ToString();
+                            if (Id == param.id || Id > param.id)
+                            {
+                                if (Id == param.id && DoEdit == DoVal)
+                                {
+                                    break;
+                                }
+                                int CountItem = _contextDBSCM.DoHistories.Where(x => x.RunningCode == RunningCode && x.Rev == Rev && x.DateVal == DateVal && x.Partno == PartNo).ToList().Count();
+                                SqlCommand sqlUpdate = new SqlCommand();
+                                sqlUpdate.CommandText = @"UPDATE [dbo].[DO_HISTORY] SET [REVISION] = @REVISION WHERE ID = @ID";
+                                sqlUpdate.Parameters.Add(new SqlParameter("@REVISION", CountItem));
+                                sqlUpdate.Parameters.Add(new SqlParameter("@ID", Id));
+                                dbSCM.Query(sqlUpdate);
+                                if (Id == param.id)
+                                {
+                                    if (DoEdit > DoVal)
+                                    {
+                                        stock = StockVal + (DoEdit - DoVal);
+                                    }
+                                    else if (DoEdit < DoVal)
+                                    {
+                                        stock = StockVal;
+                                        stock = stock - (DoVal - DoEdit);
+                                    }
+                                    _do = DoEdit;
+                                    SqlCommand sqlInsert = new SqlCommand();
+                                    sqlInsert.CommandText = @"INSERT INTO [dbo].[DO_HISTORY]([RUNNING_CODE],[REV],[PARTNO],[DATE_VAL],[PLAN_VAL],[DO_VAL],[STOCK_VAL],[STOCK],[VD_CODE],[INSERT_DT],[INSERT_BY],[STATUS],[REVISION]) VALUES (@RUNNING_CODE,@REV,@PARTNO,@DATE_VAL,@PLAN_VAL,@DO_VAL,@STOCK_VAL,@STOCK,@VD_CODE,@INSERT_DATE,@INSERT_BY,@STATUS,@REVISION)";
+                                    sqlInsert.Parameters.Add(new SqlParameter("@RUNNING_CODE", RunningCode));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@REV", Rev));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@PARTNO", PartNo));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@DATE_VAL", DateVal));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@PLAN_VAL", dr["PLAN_VAL"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@DO_VAL", _do));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@STOCK_VAL", stock));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@STOCK", StockDefault));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@VD_CODE", dr["VD_CODE"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@INSERT_DATE", DateTime.Now));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@INSERT_BY", dr["INSERT_BY"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@STATUS", dr["STATUS"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@REVISION", 999));
+                                    dbSCM.Query(sqlInsert);
+                                }
+                                else if (Id > param.id)
+                                {
+                                    stock = (stock + DoVal) - PlanVal;
+                                    SqlCommand sqlInsert = new SqlCommand();
+                                    sqlInsert.CommandText = @"INSERT INTO [dbo].[DO_HISTORY]([RUNNING_CODE],[REV],[PARTNO],[DATE_VAL],[PLAN_VAL],[DO_VAL],[STOCK_VAL],[STOCK],[VD_CODE],[INSERT_DT],[INSERT_BY],[STATUS],[REVISION]) VALUES (@RUNNING_CODE,@REV,@PARTNO,@DATE_VAL,@PLAN_VAL,@DO_VAL,@STOCK_VAL,@STOCK,@VD_CODE,@INSERT_DATE,@INSERT_BY,@STATUS,@REVISION)";
+                                    sqlInsert.Parameters.Add(new SqlParameter("@RUNNING_CODE", RunningCode));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@REV", Rev));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@PARTNO", PartNo));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@DATE_VAL", DateVal));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@PLAN_VAL", dr["PLAN_VAL"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@DO_VAL", DoVal));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@STOCK_VAL", stock));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@STOCK", StockDefault));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@VD_CODE", dr["VD_CODE"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@INSERT_DATE", DateTime.Now));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@INSERT_BY", dr["INSERT_BY"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@STATUS", dr["STATUS"].ToString()));
+                                    sqlInsert.Parameters.Add(new SqlParameter("@REVISION", 999));
+                                    dbSCM.Query(sqlInsert);
+                                }
+                            }
+                        }
+                    }
+                    dataAfterUpdate = _contextDBSCM.DoHistories.Where(x => x.Id >= param.id && x.Revision == 999).ToList();
+                }
             }
             return Ok(new { status = status, data = dataAfterUpdate, message = message });
         }
@@ -350,18 +350,26 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/vender/update/detail")]
         public IActionResult UpdateVenderDetail([FromBody] M_UPDATE_VENDER_DETAIL param)
         {
-            var contentVenderMaster = _contextDBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == param.vender);
-            if (contentVenderMaster != null)
+            DoVenderMaster oVdStd = _contextDBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == param.vender);
+            try
             {
-                contentVenderMaster.VdMinDelivery = param.min;
-                contentVenderMaster.VdMaxDelivery = param.max;
-                contentVenderMaster.VdRound = param.round;
-                contentVenderMaster.VdTimeScheduleDelivery = param.timeSchedule;
+                if (oVdStd != null)
+                {
+                    oVdStd.VdBoxPeriod = param.vdBoxPeriod;
+                    oVdStd.VdMinDelivery = param.min;
+                    oVdStd.VdMaxDelivery = param.max;
+                    oVdStd.VdRound = param.round;
+                    _contextDBSCM.DoVenderMasters.Update(oVdStd);
+                }
+                List<DoMaster> contentRound = _contextDBSCM.DoMasters.Where(x => x.VdCode == param.vender).ToList();
+                contentRound.ForEach(x => { x.VdRound = param.round; });
+                int active = _contextDBSCM.SaveChanges();
+                return Ok(new { update = active, message = "" });
             }
-            List<DoMaster> contentRound = _contextDBSCM.DoMasters.Where(x => x.VdCode == param.vender).ToList();
-            contentRound.ForEach(x => { x.VdRound = param.round; });
-            int active = _contextDBSCM.SaveChanges();
-            return Ok(new { update = active });
+            catch (Exception e)
+            {
+                return Ok(new { update = false, message = e.Message.ToString() });
+            }
         }
 
         [HttpGet]
@@ -398,21 +406,21 @@ namespace DeliveryOrderAPI.Controllers
             return Ok(new { update = update });
         }
 
-        [HttpGet]
-        [Route("/vender/debug")]
-        public IActionResult VenderDebug()
-        {
-            SqlCommand sql = new SqlCommand();
-            sql.CommandText = "SELECT A.VD_CODE,B.VenderName FROM [dbSCM].[dbo].[DO_VENDER_MASTER] A LEFT JOIN [dbSCM].[dbo].[AL_Vendor] B ON A.VD_CODE = B.Vender";
-            DataTable dt = dbSCM.Query(sql);
-            foreach (DataRow dr in dt.Rows)
-            {
-                SqlCommand sqlUpdate = new SqlCommand();
-                sqlUpdate.CommandText = "UPDATE [dbSCM].[dbo].[DO_VENDER_MASTER] SET VD_DESC = '" + dr["VenderName"] + "' WHERE VD_CODE ='" + dr["VD_CODE"] + "'";
-                dbSCM.Query(sqlUpdate);
-            }
-            return Ok();
-        }
+        //[HttpGet]
+        //[Route("/vender/debug")]
+        //public IActionResult VenderDebug()
+        //{
+        //    SqlCommand sql = new SqlCommand();
+        //    sql.CommandText = "SELECT A.VD_CODE,B.VenderName FROM [dbSCM].[dbo].[DO_VENDER_MASTER] A LEFT JOIN [dbSCM].[dbo].[AL_Vendor] B ON A.VD_CODE = B.Vender";
+        //    DataTable dt = dbSCM.Query(sql);
+        //    foreach (DataRow dr in dt.Rows)
+        //    {
+        //        SqlCommand sqlUpdate = new SqlCommand();
+        //        sqlUpdate.CommandText = "UPDATE [dbSCM].[dbo].[DO_VENDER_MASTER] SET VD_DESC = '" + dr["VenderName"] + "' WHERE VD_CODE ='" + dr["VD_CODE"] + "'";
+        //        dbSCM.Query(sqlUpdate);
+        //    }
+        //    return Ok();
+        //}
 
         [HttpGet]
         [Route("/license/update/expire")]
@@ -505,12 +513,12 @@ namespace DeliveryOrderAPI.Controllers
             return Ok(_contextDBSCM.DoDictMstrs.Where(x => x.DictType == "PRIVILEGE" && x.Code == type).ToList());
         }
 
-        [HttpPost]
-        [Route("/test")]
-        public IActionResult getTest([FromBody] MTest param)
-        {
-            return Ok(param);
-        }
+        //[HttpPost]
+        //[Route("/test")]
+        //public IActionResult getTest([FromBody] MTest param)
+        //{
+        //    return Ok(param);
+        //}
 
         [HttpGet]
         [Route("/dict/timeschedule")]
@@ -576,19 +584,6 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/getListBuyer")]
         public IActionResult GetListBuyer()
         {
-            //var ListBuyer = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.RefCode != "").ToList();
-            //var res = (from item in (from dict in ListBuyer
-            //                         select new
-            //                         {
-            //                             code = dict.Code
-            //                         }).GroupBy(x => x.code).ToList()
-            //           join emp in _contextDBHRM.Employees
-            //      on item.Key equals emp.Code
-            //           select new
-            //           {
-            //               empcode = emp.Code,
-            //               fullname = $"{emp.Pren!.ToUpper()}{emp.Name} {emp.Surn}"
-            //           }).ToList();
             return Ok(serv.GetListBuyer());
         }
 
@@ -706,26 +701,188 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 if (update > 0)
                 {
                     SqlCommand sql = new SqlCommand();
-                    sql.CommandText = @"INSERT [dbo].[DO_LOG]  (
-            [RUNNING_CODE]
-           ,[PARTNO]
-           ,[DATE_VAL]
-           ,[PREV_DO]
-           ,[DO]
-           ,[STATUS]
-           ,[DT_INSERT]
-           ,[DT_UPDATE]
-           ,[UPDATE_BY]) VALUES ('" + runningCode + "','" + partNo + "','" + ymd + "','" + doPrev + "','" + doVal + "','CHANGE_DO','" + DateTime.Now + "','" + DateTime.Now + "','" + empCode + "')";
-                    //sql.Parameters.Add(new SqlParameter(":RUNNING_CODE", runningCode));
-                    //sql.Parameters.Add(new SqlParameter(":PARTNO", partNo));
-                    //sql.Parameters.Add(new SqlParameter(":DATE_VAL", ymd));
-                    //sql.Parameters.Add(new SqlParameter(":PREV_DO", doPrev));
-                    //sql.Parameters.Add(new SqlParameter(":DO", doVal));
-                    //sql.Parameters.Add(new SqlParameter(":STATUS", "CHANGE_DO"));
-                    //sql.Parameters.Add(new SqlParameter(":DT_INSERT", DateTime.Now));
-                    //sql.Parameters.Add(new SqlParameter(":DT_UPDATE", DateTime.Now));
-                    //sql.Parameters.Add(new SqlParameter(":UPDATE_BY", empCode));
+                    sql.CommandText = @"INSERT [dbo].[DO_LOG]  ([RUNNING_CODE],[PARTNO],[DATE_VAL],[PREV_DO],[DO],[STATUS],[DT_INSERT],[DT_UPDATE],[UPDATE_BY]) VALUES ('" + runningCode + "','" + partNo + "','" + ymd + "','" + doPrev + "','" + doVal + "','CHANGE_DO','" + DateTime.Now + "','" + DateTime.Now + "','" + empCode + "')";
                     DataTable dt = dbSCM.Query(sql);
+                }
+            }
+            return Ok(new
+            {
+                status = update
+            });
+        }
+
+        [HttpPost]
+        [Route("/GET_LIST_DRAWING_DELIVERY_OF_DAY")]
+        public IActionResult GET_LIST_DRAWING_DELIVERY_OF_DAY([FromBody] M_GET_LIST_DRAWING_DELIVERY_OF_DAY param)
+        {
+            string dtTarget = param.dtTarget;
+            string vdCode = param.vdCode;
+            List<DoHistoryDev> ListDO = _contextDBSCM.DoHistoryDevs.Where(x => x.DateVal == dtTarget && x.Revision == 999 && x.DoVal > 0 && x.VdCode == vdCode).ToList();
+            return Ok(ListDO);
+        }
+
+        //[HttpPost]
+        //[Route("/INSERT_LIST_DRAWING_DELIVERY_OF_DAY")]
+        //public IActionResult INSERT_LIST_DRAWING_DELIVERY_OF_DAY([FromBody] List<M_INSERT_LIST_DRAWING_DELIVERY_OF_DAY> param)
+        //{
+        //    foreach (M_INSERT_LIST_DRAWING_DELIVERY_OF_DAY item in param)
+        //    {
+
+        //    }
+        //    return Ok();
+        //}
+
+
+        [HttpPost]
+        [Route("/VIEW_HISTORY_PLAN")]
+        public IActionResult VIEW_HISTORY_PLAN([FromBody] MVIEW_HISTORY_PLAN param)
+        {
+            string date = param.date;
+            string part = param.part;
+            var res = _contextDBSCM.DoHistoryDevs.Where(x => x.DateVal == date && x.Partno == part).OrderByDescending(x => x.InsertDt).ToList();
+            return Ok(res);
+        }
+
+        [HttpPost]
+        [Route("/CALENDAR/INSERT")]
+        public IActionResult CalendarInsert([FromBody] DoDictMstr obj)
+        {
+            string dictType = "holiday";
+            string dictCode = obj.Code;
+            int action = 0;
+            string message = "";
+            DoDictMstr oDictHoliday = _contextDBSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == dictType && x.Code == obj.Code);
+            if (oDictHoliday != null)
+            {
+                oDictHoliday.Description = obj.Description;
+                oDictHoliday.UpdateDate = DateTime.Now;
+                _contextDBSCM.DoDictMstrs.Update(oDictHoliday);
+                action = _contextDBSCM.SaveChanges();
+            }
+            else
+            {
+                oDictHoliday = new DoDictMstr();
+                oDictHoliday.DictType = dictType;
+                oDictHoliday.Code = dictCode;
+                oDictHoliday.Description = obj.Description;
+                oDictHoliday.Note = dictCode;
+                oDictHoliday.CreateDate = DateTime.Now;
+                oDictHoliday.UpdateDate = DateTime.Now;
+                oDictHoliday.DictStatus = "pending";
+                _contextDBSCM.DoDictMstrs.Add(oDictHoliday);
+                action = _contextDBSCM.SaveChanges();
+            }
+            return Ok(new
+            {
+                status = action,
+                message = message
+            });
+        }
+
+        [HttpGet]
+        [Route("/CALENDAR/GET/{yyyy}")]
+        public IActionResult CalendarGetByYear(string yyyy)
+        {
+            List<DoDictMstr> rCalendar = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "holiday" && x.Code.StartsWith(yyyy)).ToList();
+            return Ok(rCalendar);
+        }
+
+        [HttpGet]
+        [Route("/CALENDAR/DATE/GET/{ymd}")]
+        public IActionResult CalendarGetDateDetail(string ymd)
+        {
+            DoDictMstr oCalendar = new DoDictMstr();
+            oCalendar = _contextDBSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == "holiday" && x.Code == ymd);
+            return Ok(oCalendar);
+        }
+
+
+        [HttpGet]
+        [Route("/CALENDAR/DEL/{ymd}")]
+        public IActionResult DictDelHoliday(string ymd)
+        {
+            DoDictMstr oCalendar = new DoDictMstr();
+            int action = 0;
+            oCalendar = _contextDBSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == "holiday" && x.Code == ymd);
+            if (oCalendar != null)
+            {
+                _contextDBSCM.DoDictMstrs.Remove(oCalendar);
+                action = _contextDBSCM.SaveChanges();
+            }
+            return Ok(new
+            {
+                status = action
+            });
+        }
+
+        [HttpPost]
+        [Route("/HISTORY/DO")]
+        public IActionResult GetHistoryDO([FromBody] DoLogDev obj)
+        {
+            List<DoLogDev> rLogDev = new List<DoLogDev>();
+            string date = obj.logToDate;
+            string part = obj.logPartNo;
+            string doRunning = obj.doRunning;
+            double doVal = obj.logDo.HasValue ? (double)obj.logDo : 0;
+            int doRev = obj.doRev.HasValue ? (int)obj.doRev : 0;
+            SqlCommand sql = new SqlCommand();
+            sql.CommandText = @"SELECT * FROM [dbSCM].[dbo].[DO_LOG_DEV] where LOG_PART_NO = @part and LOG_TO_DATE = @log_to_date and DO_RUNNING = @DO_RUNNING and DO_REV = @DO_REV order by LOG_ID asc";
+            //and LOG_DO = @LOG_DO
+            sql.Parameters.Add(new SqlParameter("@part", part));
+            sql.Parameters.Add(new SqlParameter("@log_to_date", date));
+            sql.Parameters.Add(new SqlParameter("@DO_RUNNING", doRunning));
+            sql.Parameters.Add(new SqlParameter("@DO_REV", doRev));
+            //sql.Parameters.Add(new SqlParameter("@LOG_DO", doVal));
+            DataTable dt = dbSCM.Query(sql);
+            foreach (DataRow dr in dt.Rows)
+            {
+                DoLogDev item = new DoLogDev();
+                item.logPartNo = dr["LOG_PART_NO"].ToString();
+                item.logType = dr["LOG_TYPE"].ToString();
+                item.logFromDate = dr["LOG_FROM_DATE"].ToString();
+                item.logFromStock = Convert.ToDouble(dr["LOG_FROM_STOCK"].ToString());
+                item.logFromPlan = Convert.ToDouble(dr["LOG_FROM_PLAN"].ToString());
+                item.logNextDate = dr["LOG_NEXT_DATE"].ToString();
+                item.logNextStock = Convert.ToDouble(dr["LOG_NEXT_STOCK"].ToString());
+                item.logDo = Convert.ToDouble(dr["LOG_DO"].ToString());
+                item.logBox = Convert.ToDouble(dr["LOG_BOX"].ToString());
+                item.logState = dr["LOG_STATE"].ToString();
+                item.logRemark = dr["LOG_REMARK"].ToString();
+                item.logUpdateDate = Convert.ToDateTime(dr["LOG_UPDATE_DATE"].ToString());
+                rLogDev.Add(item);
+            }
+            return Ok(rLogDev);
+        }
+
+        [HttpPost]
+        [Route("/HISTORY/EDIT/DO")]
+        public IActionResult HistoryEditDO([FromBody] MEditDO param)
+        {
+            int update = 0;
+            string runningCode = param.runningCode;
+            if (runningCode.Length == 11)
+            {
+                runningCode = runningCode.Substring(0, 8);
+            }
+            string partNo = param.partno;
+            string ymd = param.ymd;
+            string empCode = param.empCode;
+            double doVal = param.doVal;
+            double doPrev = param.doPrev;
+            List<DoHistoryDev> PrevContent = _contextDBSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
+            if (PrevContent.Count > 0)
+            {
+                DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
+                PrevItem.DoVal = doVal;
+                _contextDBSCM.DoHistoryDevs.Update(PrevItem);
+                update = _contextDBSCM.SaveChanges();
+                if (update > 0)
+                {
+                    SqlCommand sqlInsertLog = new SqlCommand();
+                    sqlInsertLog.CommandText = @"INSERT INTO [dbo].[DO_LOG_DEV] ([DO_RUNNING],[DO_REV],[LOG_PART_NO],[LOG_VD_CODE] ,[LOG_PROD_LEAD],[LOG_TYPE],[LOG_FROM_DATE],[LOG_FROM_STOCK],[LOG_FROM_PLAN],[LOG_NEXT_DATE],[LOG_NEXT_STOCK],[LOG_TO_DATE],[LOG_DO],[LOG_BOX],[LOG_STATE],[LOG_REMARK],[LOG_CREATE_DATE],[LOG_UPDATE_DATE],[LOG_UPDATE_BY])
+     VALUES
+           ('" + runningCode + "','" + PrevItem.Rev + "','" + partNo + "','" + PrevItem.VdCode + "','2','EDIT_DO','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.PlanVal + "','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.DateVal + "','" + doVal + "','0','referent','edit_do',GETDATE(),GETDATE(),'" + empCode + "') ";
+                    int insertLog = dbSCM.ExecuteNonCommand(sqlInsertLog);
                 }
             }
             return Ok(new
