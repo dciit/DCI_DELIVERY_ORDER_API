@@ -16,5 +16,7 @@
         public double POFIFO { get; set; }
         public bool holiday { get; set; } = false;
         public List<DoLogDev>? Log { get; set; } = new List<DoLogDev>();
+        public string? vdCode { get; set; } = "";
+        public string? vdName { get; set; } = "";
     }
 }

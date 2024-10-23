@@ -8,5 +8,6 @@
         public int round { get; set; }
         //public string timeSchedule { get; set; }    
         public bool vdBoxPeriod { get; set; } = false;
+        public int vdProdLead { get; set; } = 7;
     }
 }

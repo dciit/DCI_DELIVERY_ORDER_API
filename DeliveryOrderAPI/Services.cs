@@ -465,23 +465,14 @@ namespace DeliveryOrderAPI
         public List<DoPartMaster> GetPartByVenderCode(string VenderCode)
         {
             SqlCommand sql = new SqlCommand();
-            //sql.CommandText = @"SELECT PART.*,VD.* FROM [dbSCM].[dbo].[DO_PART_MASTER] PART LEFT JOIN [dbSCM].[dbo].[DO_VENDER_MASTER] VD ON PART.VD_CODE = VD.VD_CODE WHERE PART.PARTNO IN ('" + _PartJoin + "')";
             List<DoPartMaster> res = _DBSCM.DoPartMasters.Where(x => x.VdCode.Trim() == VenderCode.Trim()).ToList();
             return res;
         }
 
         internal ModelRefreshStock REFRESH_STOCK(List<MRESULTDO> response, string vender, string part, string cm, List<MStockAlpha> stockAlpha)
         {
-            //string YMDFormat = "yyyyMMdd";
             List<MRESULTDO> res = response;
             DateTime dtNow = DateTime.Now;
-            //dtLoop = dtLoop.AddDays(Pdlt * -1);
-            //if (dtLoop < DateTime.Now)
-            //{
-            //    dtLoop = DateTime.Now;
-            //}
-            //dtLoop = dtLoop.AddDays(-1);
-            //int FirstIndex = res.FindIndex(x => x.Vender == vender && x.PartNo == part && x.Date.ToString(YMDFormat) == dtLoop.ToString(YMDFormat));
             double StockLoop = 0;
             MStockAlpha ItemStock = stockAlpha.FirstOrDefault(x => x.Part == part && x.Cm == cm)!;
             if (ItemStock != null)
@@ -604,7 +595,7 @@ namespace DeliveryOrderAPI
             // [S] === เพิ่มเช็คว่าเวลาเกินเวลาที่ระบบ Distribute [16/07/2024 17:15] === //
             // ============================================================= //
             //bool over3PM = false;
-            DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22,0, 0);
+            DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22, 0, 0);
             if (dtNow > dt3PM)
             {
                 //over3PM = true;
@@ -677,17 +668,7 @@ namespace DeliveryOrderAPI
             // ==== [E] แก้ไขวิธีการหาวันที่สามารถลงยอด D/O ที่เกิดจากการติดลบ [16/07/24 17:25] === //
             // ===================================================================== //
 
-
-
-
-
-
-
-
-
             //bool CanDelivery = venderDelivery.ContainsKey(ShortDay) ? venderDelivery[ShortDay.ToUpper()] : false;
-
-            ///* A003 [20240610] */
 
             //if (timeNow < timeFix) { dtEndFixed = dtEndFixed.AddDays(-1); }
             //DateTime dtStartDefailt = dtNow;
@@ -905,8 +886,10 @@ namespace DeliveryOrderAPI
             return response;
         }
 
-        public MODEL_GET_DO CalDO(bool run, string vdcode = "", MGetPlan param = null, string doRunningCode = "", int doRev = 0)
+        public MODEL_GET_DO CalDO(bool run, string vdcode = "", MGetPlan param = null, string doRunningCode = "", int doRev = 0, bool? hiddenPartNoPlan = true)
         {
+            DateTime dtNow = DateTime.Now;
+            DateTime dtDistribute = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22, 0, 0);
             string ymd = DateTime.Now.ToString("yyyyMMdd");
             List<MPOAlpha01> rPOFIFO = new List<MPOAlpha01>();
             vdcode = vdcode != null ? vdcode : "";
@@ -947,7 +930,6 @@ namespace DeliveryOrderAPI
             Dictionary<string, Dictionary<string, bool>> VenderDeliveryMaster = new Dictionary<string, Dictionary<string, bool>>();
             int dFixed = 2;
             int dRun = 7;
-            DateTime dtNow = DateTime.Now;
             DateTime dtStart = dtNow.AddDays(-7);
             DateTime dtRun = dtNow.AddDays(dFixed);
             DateTime dtEnd = dtNow.AddDays(dFixed + dRun);
@@ -970,6 +952,7 @@ namespace DeliveryOrderAPI
                 int rev = (int)Historys.FirstOrDefault()!.Rev!;
                 nbr = $"{Historys.FirstOrDefault()!.RunningCode}{rev.ToString("D3")}";
             }
+            List<DoVenderMaster> ListVenderMaster = _DBSCM.DoVenderMasters.ToList();
             List<DoDictMstr> ListVenderOfBuyer = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256" && x.DictStatus == "999").ToList();
             if (vdcode != "")
             {
@@ -1037,6 +1020,13 @@ namespace DeliveryOrderAPI
                 {
                     string Part = itemPart.Partno.Trim();
                     string Cm = itemPart.Cm;
+                    //if (hiddenPartNoPlan == true)
+                    //{
+                    //    if (Plans.Where(x => x.Partno != null && x.Partno.Trim() == Part.Trim()).Sum(x => x.Qty) == 0)
+                    //    {
+                    //        continue;
+                    //    }
+                    //}
                     MAlpart oAlPart = rAlPart.FirstOrDefault(x => x.DrawingNo == Part);
                     if (oAlPart != null)
                     {
@@ -1046,11 +1036,14 @@ namespace DeliveryOrderAPI
                     double Stock = 0;
                     DateTime dtLoop = dtStart;
                     double nPoFiFo = rPOFIFO.Where(x => x.partno == Part).Sum(x => x.whblbqty);
+                    DoVenderMaster objVender = ListVenderMaster.FirstOrDefault(x => x.VdCode == vender)!;
                     while (dtLoop <= dtEnd)
                     {
                         MRESULTDO itemResponse = new MRESULTDO();
                         itemResponse.PartNo = Part;
                         itemResponse.Vender = vender;
+                        itemResponse.vdCode = vender;
+                        itemResponse.vdName = objVender != null ? objVender.VdDesc : vender;
                         itemResponse.Date = dtLoop;
                         if (dtLoop > dtEndFixed)
                         {
@@ -1070,11 +1063,7 @@ namespace DeliveryOrderAPI
                         {
                             itemResponse.DoAct = itemDoAct.Wqty;
                         }
-                        MPO itemPO = POs.FirstOrDefault(x => x.partNo.Trim() == Part && x.date == dtLoop.Date.ToString(YMDFormat) && x.vdCode == vender)!;
-                        if (itemPO != null)
-                        {
-                            itemResponse.PO = itemPO.qty;
-                        }
+
                         if (dtLoop.Date == dtNow.Date)
                         {
                             List<MStockAlpha> rStock = StockAlpha.Where(x => x.Part.Trim() == Part.Trim()).ToList();
@@ -1084,9 +1073,12 @@ namespace DeliveryOrderAPI
                                 itemResponse.Stock = Stock;
                             }
                         }
+                        //if (Part == "2P659567-1")
+                        //{
+                        //    Console.WriteLine("asda");
+                        //}
                         // หากเวลาปัจจุบันมากกว่า 22:00 จะค้นหาประวัติของวันที่สิ้นสุด Fixed ด้วย ==== [16/07/2024 16:51] ==== //
-                        DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22,0, 0);
-                        if ((dtNow > dt3PM && dtLoop.Date <= dtEndFixed.Date) || (dtNow <= dt3PM && dtLoop.Date <= dtEndFixed.Date))
+                        if ((dtNow > dtDistribute && dtLoop.Date <= dtEndFixed.Date) || (dtNow <= dtDistribute && dtLoop.Date <= dtEndFixed.Date))
                         {
                             DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part)!;
                             if (oHis != null)
@@ -1095,7 +1087,6 @@ namespace DeliveryOrderAPI
                                 itemResponse.PlanPrev = itemResponse.Plan;
                                 itemResponse.Do = (double)oHis.DoVal!;
                                 itemResponse.Stock = (double)oHis.StockVal!;
-
                                 // หากวันที่เป็นวันปัจจุบันขึ้นไป จะนำ STOCK - PLAN
                                 if (dtLoop.Date >= dtNow.Date)
                                 {
@@ -1116,7 +1107,16 @@ namespace DeliveryOrderAPI
                                     itemResponse.Stock = Stock;
                                 }
                             }
-                            itemResponse.POFIFO = 0;
+
+                            //================ SET PO ==================//
+                            MPO itemPO = POs.FirstOrDefault(x => x.partNo.Trim() == Part && x.date == dtLoop.Date.ToString(YMDFormat) && x.vdCode == vender)!;
+                            if (itemPO != null)
+                            {
+                                itemResponse.PO = itemPO.qty;
+                            }
+                            //================ SET PO ==================//
+                            nPoFiFo = nPoFiFo - itemResponse.Do;
+                            itemResponse.POFIFO = nPoFiFo;
                             DOITEM.Add(itemResponse);
                         }
                         else
@@ -1134,8 +1134,7 @@ namespace DeliveryOrderAPI
                             Stock -= itemResponse.Plan;
                             itemResponse.Stock = Stock;
                             nPoFiFo = nPoFiFo - itemResponse.Do;
-                            itemResponse.POFIFO = nPoFiFo - itemResponse.Do;
-                            DOITEM.Add(itemResponse);
+                            itemResponse.POFIFO = nPoFiFo;
                             if (Stock <= 0)
                             {
                                 double DO = GetDoVal(Math.Abs(Stock), itemPart, oVdStd);
@@ -1144,38 +1143,12 @@ namespace DeliveryOrderAPI
                                 DOITEM = rData.data;
                                 Stock = rData.Stock;
                             }
+                            DOITEM.Add(itemResponse);
                         }
                         dtLoop = dtLoop.AddDays(1);
                     }
-
-                    /* A003 */
-                    //List<MRESULTDO> rDOisHoliday = DOITEM.Where(x => x.PartNo == Part && x.holiday == true && x.Do > 0).ToList();
-                    //DateTime dtEndFixed = dtNow.AddDays((VenderMaster.VdProdLead != null ? (int)VenderMaster.VdProdLead : 0) - 1);
-                    //if (rDictHoliday.Count > 0)
-                    //{
-                    //    double doAvailble = 0;
-                    //    List<MRESULTDO> rDOByModel = DOITEM.Where(x => x.PartNo == Part && x.Date.Date > dtEndFixed.Date).ToList();
-                    //    foreach (MRESULTDO oDO in rDOByModel)
-                    //    {
-                    //        if (oDO.Do > 0)
-                    //        {
-                    //            DateTime oDate = oDO.Date;
-                    //            DoDictMstr isHoliday = rDictHoliday.FirstOrDefault(x => x.Code == oDate.ToString("yyyyMMdd"));
-                    //            if (isHoliday != null)
-                    //            {
-                    //                doAvailble += oDO.Do;
-                    //                oDate = oDate.AddDays(-1);
-                    //            }
-                    //        }
-                    //    }
-                    //}
-                    /* [E] A003 */
-
                 }
-
-
             }
-            //List<DoDictMstr> HOLIDAY = _GET_HOLIDAY();
             bool dev = false;
             if (run == true || dev == true)
             {
@@ -1306,6 +1279,8 @@ namespace DeliveryOrderAPI
             }
             return res;
         }
+
+       
     }
 
 

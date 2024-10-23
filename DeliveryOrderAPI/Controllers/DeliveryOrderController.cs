@@ -2,10 +2,12 @@
 using Azure;
 using DeliveryOrderAPI.Contexts;
 using DeliveryOrderAPI.Models;
+using DeliveryOrderAPI.Params;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System;
 using System.Data;
+using System.Net;
 
 namespace DeliveryOrderAPI.Controllers
 {
@@ -64,7 +66,8 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/getPlans")]
         public IActionResult getPlans([FromBody] MGetPlan param)
         {
-            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param, "", 0);
+            bool? hiddenPartNoPlan = param.hiddenPartNoPlan;
+            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan);
             return Ok(response);
         }
 
@@ -82,7 +85,7 @@ namespace DeliveryOrderAPI.Controllers
                 rev = (int)prev.Rev!;
             }
             rev++;
-            MODEL_GET_DO GroupDO = serv.CalDO(true, "", null, nbr, rev);
+            MODEL_GET_DO GroupDO = serv.CalDO(true, "", null, nbr, rev, false);
             foreach (MRESULTDO itemDO in GroupDO.data)
             {
                 DoHistoryDev item = new DoHistoryDev()
@@ -359,6 +362,7 @@ namespace DeliveryOrderAPI.Controllers
                     oVdStd.VdMinDelivery = param.min;
                     oVdStd.VdMaxDelivery = param.max;
                     oVdStd.VdRound = param.round;
+                    oVdStd.VdProdLead = param.vdProdLead;
                     _contextDBSCM.DoVenderMasters.Update(oVdStd);
                 }
                 List<DoMaster> contentRound = _contextDBSCM.DoMasters.Where(x => x.VdCode == param.vender).ToList();
@@ -888,6 +892,47 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             return Ok(new
             {
                 status = update
+            });
+        }
+
+        [HttpPost]
+        [Route("/AddPartMaster")]
+        public IActionResult AddPartMaster([FromBody] ParamAddPartMaster param)
+        {
+            bool status = false;
+            string drawing = param.drawing.Trim();
+            string cm = param.cm;
+            string vender = param.vender;
+            int boxMin = param.boxMin;
+            int boxQty = param.boxQty;
+            string desc = param.description;
+            string unit = param.unit;
+            DoPartMaster oPart = new DoPartMaster()
+            {
+                Active = "ACTIVE",
+                BoxMax = 99999,
+                BoxMin = boxMin,
+                BoxQty = boxQty,
+                Cm = cm,
+                Description = desc,
+                Partno = drawing,
+                Diameter = "",
+                VdCode = vender,
+                Pdlt = 2,
+                Unit = unit,
+                UpdateBy = param.updateBy,
+                UpdateDate = DateTime.Now
+            };
+            int exist = _contextDBSCM.DoPartMasters.Where(x => x.Partno == drawing && x.Cm == cm && x.VdCode == vender).Count();
+            if (exist == 0)
+            {
+                _contextDBSCM.Add(oPart);
+                int add = _contextDBSCM.SaveChanges();
+                status = add > 0 ? true : false;
+            }
+            return Ok(new
+            {
+                status = status
             });
         }
     }

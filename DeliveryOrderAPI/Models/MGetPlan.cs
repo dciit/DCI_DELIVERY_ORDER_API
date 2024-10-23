@@ -34,5 +34,7 @@
 
         public string? model { get; set; }
         public bool? poshort {  get; set; }
+
+        public bool? hiddenPartNoPlan { get; set; } = true;
     }
 }
