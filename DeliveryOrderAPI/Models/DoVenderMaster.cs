@@ -100,4 +100,8 @@ public partial class DoVenderMaster
     public string? VdTimeScheduleDelivery { get; set; }
 
     public int? VdProdLead { get; set; }
+
+    public string? VdStatus { get; set; }
+
+    public int VdSafetyStock { get; set; }
 }

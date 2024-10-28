@@ -47,6 +47,7 @@ public partial class DBSCM : DbContext
                 .HasMaxLength(20)
                 .HasColumnName("CODE");
             entity.Property(e => e.CreateDate)
+                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
                 .HasColumnName("CREATE_DATE");
             entity.Property(e => e.Description)
@@ -54,6 +55,7 @@ public partial class DBSCM : DbContext
                 .HasColumnName("DESCRIPTION");
             entity.Property(e => e.DictStatus)
                 .HasMaxLength(20)
+                .HasDefaultValueSql("((999))")
                 .HasColumnName("DICT_STATUS");
             entity.Property(e => e.DictType)
                 .HasMaxLength(20)
@@ -61,10 +63,17 @@ public partial class DBSCM : DbContext
             entity.Property(e => e.Note)
                 .HasMaxLength(50)
                 .HasColumnName("NOTE");
+            entity.Property(e => e.Ref1)
+                .HasMaxLength(50)
+                .HasColumnName("REF_1");
+            entity.Property(e => e.Ref2)
+                .HasMaxLength(50)
+                .HasColumnName("REF_2");
             entity.Property(e => e.RefCode)
                 .HasMaxLength(20)
                 .HasColumnName("REF_CODE");
             entity.Property(e => e.UpdateDate)
+                .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime")
                 .HasColumnName("UPDATE_DATE");
         });
@@ -331,6 +340,9 @@ public partial class DBSCM : DbContext
                 .HasColumnName("ACTIVE");
             entity.Property(e => e.BoxMax).HasColumnName("BOX_MAX");
             entity.Property(e => e.BoxMin).HasColumnName("BOX_MIN");
+            entity.Property(e => e.BoxPerPallet)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("BOX_PER_PALLET");
             entity.Property(e => e.BoxQty).HasColumnName("BOX_QTY");
             entity.Property(e => e.Description)
                 .HasMaxLength(50)
@@ -367,57 +379,144 @@ public partial class DBSCM : DbContext
             entity.Property(e => e.VdBoxPeriod)
                 .HasDefaultValueSql("((0))")
                 .HasColumnName("VD_BOX_PERIOD");
-            entity.Property(e => e.VdDay1).HasColumnName("VD_DAY1");
-            entity.Property(e => e.VdDay10).HasColumnName("VD_DAY10");
-            entity.Property(e => e.VdDay11).HasColumnName("VD_DAY11");
-            entity.Property(e => e.VdDay12).HasColumnName("VD_DAY12");
-            entity.Property(e => e.VdDay13).HasColumnName("VD_DAY13");
-            entity.Property(e => e.VdDay14).HasColumnName("VD_DAY14");
-            entity.Property(e => e.VdDay15).HasColumnName("VD_DAY15");
-            entity.Property(e => e.VdDay16).HasColumnName("VD_DAY16");
-            entity.Property(e => e.VdDay17).HasColumnName("VD_DAY17");
-            entity.Property(e => e.VdDay18).HasColumnName("VD_DAY18");
-            entity.Property(e => e.VdDay19).HasColumnName("VD_DAY19");
-            entity.Property(e => e.VdDay2).HasColumnName("VD_DAY2");
-            entity.Property(e => e.VdDay20).HasColumnName("VD_DAY20");
-            entity.Property(e => e.VdDay21).HasColumnName("VD_DAY21");
-            entity.Property(e => e.VdDay22).HasColumnName("VD_DAY22");
-            entity.Property(e => e.VdDay23).HasColumnName("VD_DAY23");
-            entity.Property(e => e.VdDay24).HasColumnName("VD_DAY24");
-            entity.Property(e => e.VdDay25).HasColumnName("VD_DAY25");
-            entity.Property(e => e.VdDay26).HasColumnName("VD_DAY26");
-            entity.Property(e => e.VdDay27).HasColumnName("VD_DAY27");
-            entity.Property(e => e.VdDay28).HasColumnName("VD_DAY28");
-            entity.Property(e => e.VdDay29).HasColumnName("VD_DAY29");
-            entity.Property(e => e.VdDay3).HasColumnName("VD_DAY3");
-            entity.Property(e => e.VdDay30).HasColumnName("VD_DAY30");
-            entity.Property(e => e.VdDay31).HasColumnName("VD_DAY31");
-            entity.Property(e => e.VdDay4).HasColumnName("VD_DAY4");
-            entity.Property(e => e.VdDay5).HasColumnName("VD_DAY5");
-            entity.Property(e => e.VdDay6).HasColumnName("VD_DAY6");
-            entity.Property(e => e.VdDay7).HasColumnName("VD_DAY7");
-            entity.Property(e => e.VdDay8).HasColumnName("VD_DAY8");
-            entity.Property(e => e.VdDay9).HasColumnName("VD_DAY9");
+            entity.Property(e => e.VdDay1)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY1");
+            entity.Property(e => e.VdDay10)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY10");
+            entity.Property(e => e.VdDay11)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY11");
+            entity.Property(e => e.VdDay12)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY12");
+            entity.Property(e => e.VdDay13)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY13");
+            entity.Property(e => e.VdDay14)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY14");
+            entity.Property(e => e.VdDay15)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY15");
+            entity.Property(e => e.VdDay16)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY16");
+            entity.Property(e => e.VdDay17)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY17");
+            entity.Property(e => e.VdDay18)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY18");
+            entity.Property(e => e.VdDay19)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY19");
+            entity.Property(e => e.VdDay2)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY2");
+            entity.Property(e => e.VdDay20)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY20");
+            entity.Property(e => e.VdDay21)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY21");
+            entity.Property(e => e.VdDay22)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY22");
+            entity.Property(e => e.VdDay23)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY23");
+            entity.Property(e => e.VdDay24)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY24");
+            entity.Property(e => e.VdDay25)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY25");
+            entity.Property(e => e.VdDay26)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY26");
+            entity.Property(e => e.VdDay27)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY27");
+            entity.Property(e => e.VdDay28)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY28");
+            entity.Property(e => e.VdDay29)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY29");
+            entity.Property(e => e.VdDay3)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY3");
+            entity.Property(e => e.VdDay30)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY30");
+            entity.Property(e => e.VdDay31)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY31");
+            entity.Property(e => e.VdDay4)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY4");
+            entity.Property(e => e.VdDay5)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY5");
+            entity.Property(e => e.VdDay6)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY6");
+            entity.Property(e => e.VdDay7)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY7");
+            entity.Property(e => e.VdDay8)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY8");
+            entity.Property(e => e.VdDay9)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_DAY9");
             entity.Property(e => e.VdDesc)
                 .HasMaxLength(50)
                 .HasColumnName("VD_DESC");
-            entity.Property(e => e.VdFri).HasColumnName("VD_FRI");
-            entity.Property(e => e.VdLimitBox).HasColumnName("VD_LIMIT_BOX");
-            entity.Property(e => e.VdMaxDelivery).HasColumnName("VD_MAX_DELIVERY");
+            entity.Property(e => e.VdFri)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_FRI");
+            entity.Property(e => e.VdLimitBox)
+                .HasDefaultValueSql("((0))")
+                .HasColumnName("VD_LIMIT_BOX");
+            entity.Property(e => e.VdMaxDelivery)
+                .HasDefaultValueSql("((99999))")
+                .HasColumnName("VD_MAX_DELIVERY");
             entity.Property(e => e.VdMinDelivery).HasColumnName("VD_MIN_DELIVERY");
-            entity.Property(e => e.VdMon).HasColumnName("VD_MON");
+            entity.Property(e => e.VdMon)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_MON");
             entity.Property(e => e.VdProdLead)
                 .HasDefaultValueSql("((3))")
                 .HasColumnName("VD_PROD_LEAD");
-            entity.Property(e => e.VdRound).HasColumnName("VD_ROUND");
-            entity.Property(e => e.VdSat).HasColumnName("VD_SAT");
-            entity.Property(e => e.VdSun).HasColumnName("VD_SUN");
-            entity.Property(e => e.VdThu).HasColumnName("VD_THU");
+            entity.Property(e => e.VdRound)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_ROUND");
+            entity.Property(e => e.VdSafetyStock).HasColumnName("VD_SAFETY_STOCK");
+            entity.Property(e => e.VdSat)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_SAT");
+            entity.Property(e => e.VdStatus)
+                .HasMaxLength(3)
+                .HasDefaultValueSql("((999))")
+                .HasColumnName("VD_STATUS");
+            entity.Property(e => e.VdSun)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_SUN");
+            entity.Property(e => e.VdThu)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_THU");
             entity.Property(e => e.VdTimeScheduleDelivery)
                 .HasMaxLength(8)
                 .HasColumnName("VD_TIME_SCHEDULE_DELIVERY");
-            entity.Property(e => e.VdTue).HasColumnName("VD_TUE");
-            entity.Property(e => e.VdWed).HasColumnName("VD_WED");
+            entity.Property(e => e.VdTue)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_TUE");
+            entity.Property(e => e.VdWed)
+                .HasDefaultValueSql("((1))")
+                .HasColumnName("VD_WED");
         });
 
         OnModelCreatingPartial(modelBuilder);

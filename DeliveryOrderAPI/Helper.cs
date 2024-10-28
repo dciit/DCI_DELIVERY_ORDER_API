@@ -97,6 +97,30 @@ namespace DeliveryOrderAPI
                 return 0;
             }
         }
+        public double ConvUnInt2Db(int? val)
+        {
+            try
+            {
+                return (double)Convert.ToDouble(val);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+        
+
+        public double ConvInt2Db(int val)
+        {
+            try
+            {
+                return (double)Convert.ToDouble(val);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
 
 
         public bool HasColumn(DataTable dt, string columnName)

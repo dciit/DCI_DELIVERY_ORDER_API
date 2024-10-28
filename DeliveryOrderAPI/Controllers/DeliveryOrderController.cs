@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System;
 using System.Data;
+using System.Globalization;
 using System.Net;
 
 namespace DeliveryOrderAPI.Controllers
@@ -72,11 +73,12 @@ namespace DeliveryOrderAPI.Controllers
         }
 
         [HttpGet]
-        [Route("/insertDO/{buyer}")]
-        public async Task<IActionResult> InsertDO(string buyer = "41256")
+        [Route("/distribute/{buyer}")]
+        public async Task<IActionResult> Distribute(string buyer = "41256")
         {
             string YMDFormat = "yyyyMMdd";
             DateTime dtNow = DateTime.Now;
+            //DateTime dtNow = DateTime.ParseExact("20241028", "yyyyMMdd", CultureInfo.InvariantCulture);
             string nbr = dtNow.ToString("yyyyMMdd");
             int rev = 0;
             DoHistoryDev prev = _contextDBSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
@@ -468,7 +470,7 @@ namespace DeliveryOrderAPI.Controllers
                 return Ok(new
                 {
                     status = true,
-                    jwt = jwt,
+                    jwt,
                     vdName = content.VdDesc
                 });
             }
@@ -933,6 +935,19 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             return Ok(new
             {
                 status = status
+            });
+        }
+
+        [HttpPost]
+        [Route("/checkversion")]
+        public IActionResult CheckVersionSystem([FromBody] ParamChkVer param)
+        {
+            string dictSystem = param.dictSystem;
+            string dictType = param.dictType;
+            string version = serv.ChkVer(dictSystem, dictType);
+            return Ok(new
+            {
+                version
             });
         }
     }

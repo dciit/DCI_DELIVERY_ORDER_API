@@ -1,0 +1,558 @@
+[
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "AddPartMaster",
+    "RelativePath": "AddPartMaster",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Params.ParamAddPartMaster",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "CalendarGetDateDetail",
+    "RelativePath": "CALENDAR/DATE/GET/{ymd}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ymd",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "DictDelHoliday",
+    "RelativePath": "CALENDAR/DEL/{ymd}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ymd",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "CalendarGetByYear",
+    "RelativePath": "CALENDAR/GET/{yyyy}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "yyyy",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "CalendarInsert",
+    "RelativePath": "CALENDAR/INSERT",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "obj",
+        "Type": "DeliveryOrderAPI.Models.DoDictMstr",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "CheckVersionSystem",
+    "RelativePath": "checkversion",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Params.ParamChkVer",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "dictTimeSchedule",
+    "RelativePath": "dict/timeschedule",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetHistoryById",
+    "RelativePath": "do/{id}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "DO_UPDATE",
+    "RelativePath": "do/update",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.M_DO_UPDATE",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "editDOLog",
+    "RelativePath": "DOLog",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MEditDO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "EditDO",
+    "RelativePath": "editDO",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MEditDO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GET_LIST_DRAWING_DELIVERY_OF_DAY",
+    "RelativePath": "GET_LIST_DRAWING_DELIVERY_OF_DAY",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.M_GET_LIST_DRAWING_DELIVERY_OF_DAY",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetListBuyer",
+    "RelativePath": "getListBuyer",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetListSupplierByBuyer",
+    "RelativePath": "getListSupplierByBuyer",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.DoDictMstr",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "getPlans",
+    "RelativePath": "getPlans",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MGetPlan",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetSupplier",
+    "RelativePath": "getSupplier/{buyer}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "buyer",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetVenderMasterOfVender",
+    "RelativePath": "getVenderMasterOfVender/{vdcode}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "vdcode",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetVenderMasterOfVenders",
+    "RelativePath": "getVenderMasterOfVenders",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetHistoryDO",
+    "RelativePath": "HISTORY/DO",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "obj",
+        "Type": "DeliveryOrderAPI.Models.DoLogDev",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "HistoryEditDO",
+    "RelativePath": "HISTORY/EDIT/DO",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MEditDO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "InsertDO",
+    "RelativePath": "insertDO/{buyer}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "buyer",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "getJWT",
+    "RelativePath": "jwt",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MLogin",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "LicenseUpdateExpire",
+    "RelativePath": "license/update/expire",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "UseOfLincense",
+    "RelativePath": "license/user",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "loginEmployee",
+    "RelativePath": "login/employee",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MLogin",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "loginSupplier",
+    "RelativePath": "login/supplier",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MLogin",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "getMaster",
+    "RelativePath": "master/get",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MGetMaster",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "MasterGetPart",
+    "RelativePath": "part/get",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.M_MASTER_GET_PART",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "MasterPartUpdate",
+    "RelativePath": "part/update",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.DoPartMaster",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "PartSupplyTimeScheduleDelivery",
+    "RelativePath": "partsupply/timescheduledelivery",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MPartSupplyTimeScheduleDelivery",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "getPrivilege",
+    "RelativePath": "privilege/{type}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "type",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetVender",
+    "RelativePath": "vender",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "GetVenderByCode",
+    "RelativePath": "vender/get/{vender}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "vender",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "UpdateVenderDate",
+    "RelativePath": "vender/update/date",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.M_UPDATE_VENDER_DAY",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "UpdateVenderDay",
+    "RelativePath": "vender/update/day",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.M_UPDATE_VENDER_DAY",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "UpdateVenderDetail",
+    "RelativePath": "vender/update/detail",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.M_UPDATE_VENDER_DETAIL",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "DeliveryOrderAPI.Controllers.DeliveryOrderController",
+    "Method": "VIEW_HISTORY_PLAN",
+    "RelativePath": "VIEW_HISTORY_PLAN",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "param",
+        "Type": "DeliveryOrderAPI.Models.MVIEW_HISTORY_PLAN",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  }
+]

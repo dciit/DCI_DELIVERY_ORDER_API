@@ -17,6 +17,10 @@ public partial class DoDictMstr
 
     public string? Note { get; set; }
 
+    public string? Ref1 { get; set; }
+
+    public string? Ref2 { get; set; }
+
     public DateTime? CreateDate { get; set; }
 
     public DateTime? UpdateDate { get; set; }

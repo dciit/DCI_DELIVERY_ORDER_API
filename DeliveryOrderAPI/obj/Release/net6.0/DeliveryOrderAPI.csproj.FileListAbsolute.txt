@@ -183,9 +183,10 @@ D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\staticwebasset
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\staticwebassets.build.json
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\staticwebassets.development.json
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\scopedcss\bundle\DeliveryOrderAPI.styles.css
-D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\DeliveryOrderAPI.csproj.CopyComplete
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\DeliveryOrderAPI.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\refint\DeliveryOrderAPI.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\DeliveryOrderAPI.pdb
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\DeliveryOrderAPI.genruntimeconfig.cache
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\ref\DeliveryOrderAPI.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\DeliveryOrderAPI.sourcelink.json
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\Delivery.40E471A8.Up2Date

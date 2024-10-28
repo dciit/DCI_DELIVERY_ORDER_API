@@ -127,11 +127,15 @@ D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.Identi
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.IdentityModel.Protocols.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.IdentityModel.Tokens.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.OpenApi.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.SqlServer.Server.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.Win32.SystemEvents.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Mono.TextTemplating.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Newtonsoft.Json.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Oracle.ManagedDataAccess.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.Swagger.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.SwaggerGen.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.SwaggerUI.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\System.CodeDom.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\System.Configuration.ConfigurationManager.dll
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\System.Diagnostics.PerformanceCounter.dll
@@ -169,6 +173,7 @@ D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.AssemblyInfoInputs.cache
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.AssemblyInfo.cs
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.csproj.CoreCompileInputs.cache
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cs
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cache
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\staticwebassets\msbuild.DeliveryOrderAPI.Microsoft.AspNetCore.StaticWebAssets.props
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\staticwebassets\msbuild.build.DeliveryOrderAPI.props
@@ -184,8 +189,3 @@ D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\refint\DeliveryO
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.pdb
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.genruntimeconfig.cache
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\ref\DeliveryOrderAPI.dll
-D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microsoft.OpenApi.dll
-D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.Swagger.dll
-D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.SwaggerGen.dll
-D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.SwaggerUI.dll
-D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cs
