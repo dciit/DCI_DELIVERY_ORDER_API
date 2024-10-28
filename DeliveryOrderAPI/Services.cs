@@ -221,7 +221,7 @@ namespace DeliveryOrderAPI
         public List<DoPartMaster> GetPartByVenderCode(string VenderCode)
         {
             SqlCommand sql = new SqlCommand();
-            List<DoPartMaster> res = _DBSCM.DoPartMasters.Where(x => x.VdCode.Trim() == VenderCode.Trim()).ToList();
+            List<DoPartMaster> res = _DBSCM.DoPartMasters.Where(x => x.VdCode.Trim() == VenderCode.Trim() && x.Active == "ACTIVE").ToList();
             return res;
         }
         internal ModelRefreshStock REFRESH_STOCK(List<MRESULTDO> response, string vender, string part, string cm, List<MStockAlpha> stockAlpha)
