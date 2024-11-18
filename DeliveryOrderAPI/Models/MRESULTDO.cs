@@ -18,5 +18,10 @@
         public List<DoLogDev>? Log { get; set; } = new List<DoLogDev>();
         public string? vdCode { get; set; } = "";
         public string? vdName { get; set; } = "";
+
+        public bool? changePlan { get; set; } = false;
+
+        public decimal? HistoryDevPlanQTY { get; set; } = 0;
+
     }
 }

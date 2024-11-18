@@ -21,7 +21,9 @@
         public double planNow { get; set; } 
         public double doBalance { get; set; } 
         public double po { get; set; } 
-        public double? doAddFixed { get; set; }
+        public double? doAd
+        
+        { get; set; }
 
         public string? runCode { get; set; }
         public string? runRev { get; set; }

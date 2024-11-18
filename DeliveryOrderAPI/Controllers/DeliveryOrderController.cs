@@ -7,8 +7,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System;
 using System.Data;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Net;
+using System.Reflection;
+using System.Reflection.Emit;
 
 namespace DeliveryOrderAPI.Controllers
 {
@@ -42,7 +45,7 @@ namespace DeliveryOrderAPI.Controllers
         private SqlConnectDB dbDCI = new("dbDCI");
         private OraConnectDB dbAlpha = new("ALPHA01");
         private OraConnectDB dbAlpha2 = new("ALPHA02");
-        private readonly DBSCM _contextDBSCM;
+        private readonly DBSCM efSCM;
         private readonly DBHRM _contextDBHRM;
         Services serv = new Services(new DBSCM(), new DBHRM());
         DataTable dtPlanToday = new DataTable();
@@ -59,7 +62,7 @@ namespace DeliveryOrderAPI.Controllers
         Helper oHelper = new Helper();
         public DeliveryOrderController(DBSCM contextDBSCM, DBHRM contextDBHRM)
         {
-            _contextDBSCM = contextDBSCM;
+            efSCM = contextDBSCM;
             _contextDBHRM = contextDBHRM;
         }
 
@@ -68,7 +71,7 @@ namespace DeliveryOrderAPI.Controllers
         public IActionResult getPlans([FromBody] MGetPlan param)
         {
             bool? hiddenPartNoPlan = param.hiddenPartNoPlan;
-            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan);
+            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan , false);
             return Ok(response);
         }
 
@@ -76,55 +79,45 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/distribute/{buyer}")]
         public async Task<IActionResult> Distribute(string buyer = "41256")
         {
-            string YMDFormat = "yyyyMMdd";
+            int resultInsert = 0;
             DateTime dtNow = DateTime.Now;
-            //DateTime dtNow = DateTime.ParseExact("20241028", "yyyyMMdd", CultureInfo.InvariantCulture);
             string nbr = dtNow.ToString("yyyyMMdd");
             int rev = 0;
-            DoHistoryDev prev = _contextDBSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
+            DoHistoryDev prev = efSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
             if (prev != null)
             {
                 rev = (int)prev.Rev!;
             }
             rev++;
-            MODEL_GET_DO GroupDO = serv.CalDO(true, "", null, nbr, rev, false);
-            foreach (MRESULTDO itemDO in GroupDO.data)
+            MODEL_GET_DO DOInfo = serv.CalDO(true, "", null, nbr, rev, false , false);
+            foreach (MRESULTDO oDO in DOInfo.data)
             {
-                DoHistoryDev item = new DoHistoryDev()
+                SqlCommand sqlInsert = new SqlCommand();
+                double Stock = double.IsNaN(oDO.Stock) ? 0 : oDO.Stock;
+                double Do = double.IsNaN(oDO.Do) ? 0 : oDO.Do;
+                sqlInsert.CommandText = $@"INSERT INTO DO_HISTORY_DEV (RUNNING_CODE,REV,MODEL,PARTNO,DATE_VAL,PLAN_VAL,DO_VAL,STOCK_VAL,STOCK,VD_CODE, INSERT_DT,INSERT_BY,REVISION) 
+                                      VALUES ('{nbr}','{rev}','','{oDO.PartNo}','{oDO.Date.ToString("yyyyMMdd")}','{oDO.Plan}','{Do}','{Stock}','0','{oDO.Vender}',GETDATE(),'{buyer}','999')";
+                int insert = dbSCM.ExecuteNonCommand(sqlInsert);
+                if (insert > 0)
                 {
-                    RunningCode = nbr,
-                    Rev = rev,
-                    Model = "",
-                    Partno = itemDO.PartNo,
-                    DateVal = itemDO.Date.ToString(YMDFormat),
-                    PlanVal = itemDO.Plan,
-                    DoVal = itemDO.Do,
-                    StockVal = itemDO.Stock,
-                    Stock = 0,
-                    VdCode = itemDO.Vender,
-                    InsertDt = dtNow,
-                    //InsertBy = param.empcode,
-                    InsertBy = buyer,
-                    Revision = 999
-                };
-                _contextDBSCM.DoHistoryDevs.Add(item);
+                    resultInsert = resultInsert + 1;
+                }
             }
-            int insert = _contextDBSCM.SaveChanges();
-            if (insert > 0 && prev != null)
+            if (resultInsert > 0 && prev != null)
             {
-                List<DoHistoryDev> listPrev = _contextDBSCM.DoHistoryDevs.Where(x => x.Revision == 999 && x.RunningCode == nbr && x.Rev != rev).ToList();
+                List<DoHistoryDev> listPrev = efSCM.DoHistoryDevs.Where(x => x.Revision == 999 && x.RunningCode == nbr && x.Rev != rev).ToList();
                 listPrev.ForEach(a => a.Revision = prev.Rev);
-                _contextDBSCM.SaveChanges();
+                efSCM.SaveChanges();
             }
-            if (insert > 0)
+            if (resultInsert > 0)
             {
-                List<DoHistoryDev> listPrevDay = _contextDBSCM.DoHistoryDevs.Where(x => x.Revision == 999 && x.RunningCode != nbr).ToList();
+                List<DoHistoryDev> listPrevDay = efSCM.DoHistoryDevs.Where(x => x.Revision == 999 && x.RunningCode != nbr).ToList();
                 listPrevDay.ForEach(a => a.Revision = 1);
-                _contextDBSCM.SaveChanges();
+                efSCM.SaveChanges();
             }
             return Ok(new
             {
-                status = insert,
+                status = 1,
                 nbr = $"{nbr}{rev.ToString("D3")}"
             });
         }
@@ -143,7 +136,7 @@ namespace DeliveryOrderAPI.Controllers
             var dataAfterUpdate = (dynamic)null;
             string message = "";
             double? DoEdit = oHelper.ConvDBToInt(param.doEdit);
-            List<DoHistory> rHistory = _contextDBSCM.DoHistories.Where(x => x.Id == param.id).ToList();
+            List<DoHistory> rHistory = efSCM.DoHistories.Where(x => x.Id == param.id).ToList();
             if (rHistory.Count > 0)
             {
                 DoHistory oHistory = rHistory.FirstOrDefault();
@@ -173,7 +166,7 @@ namespace DeliveryOrderAPI.Controllers
                                 break;
                             }
                             DateLoop = DateLoop.AddDays(1);
-                            oHistory = _contextDBSCM.DoHistories.Where(x => x.DateVal == DateLoop.ToString("yyyyMMdd") && x.RunningCode == DateStart.ToString("yyyyMMdd") && x.Rev == oHistory.Rev && x.Partno == param.partNo).FirstOrDefault();
+                            oHistory = efSCM.DoHistories.Where(x => x.DateVal == DateLoop.ToString("yyyyMMdd") && x.RunningCode == DateStart.ToString("yyyyMMdd") && x.Rev == oHistory.Rev && x.Partno == param.partNo).FirstOrDefault();
                             PlanVal = oHelper.ConvDBEmptyToDB(oHistory.PlanVal);
                             double DoVal = oHelper.ConvDBEmptyToDB(oHistory.DoVal);
                             StockSim = (StockSim + oHelper.ConvDBEmptyToDB(DoVal)) - PlanVal;
@@ -182,7 +175,7 @@ namespace DeliveryOrderAPI.Controllers
                 }
                 if (status != 0)
                 {
-                    var context = _contextDBSCM.DoHistories.Where(x => x.Id == param.id).FirstOrDefault();
+                    var context = efSCM.DoHistories.Where(x => x.Id == param.id).FirstOrDefault();
                     if (context != null)
                     {
                         SqlCommand sql = new SqlCommand();
@@ -208,7 +201,7 @@ namespace DeliveryOrderAPI.Controllers
                                 {
                                     break;
                                 }
-                                int CountItem = _contextDBSCM.DoHistories.Where(x => x.RunningCode == RunningCode && x.Rev == Rev && x.DateVal == DateVal && x.Partno == PartNo).ToList().Count();
+                                int CountItem = efSCM.DoHistories.Where(x => x.RunningCode == RunningCode && x.Rev == Rev && x.DateVal == DateVal && x.Partno == PartNo).ToList().Count();
                                 SqlCommand sqlUpdate = new SqlCommand();
                                 sqlUpdate.CommandText = @"UPDATE [dbo].[DO_HISTORY] SET [REVISION] = @REVISION WHERE ID = @ID";
                                 sqlUpdate.Parameters.Add(new SqlParameter("@REVISION", CountItem));
@@ -266,7 +259,7 @@ namespace DeliveryOrderAPI.Controllers
                             }
                         }
                     }
-                    dataAfterUpdate = _contextDBSCM.DoHistories.Where(x => x.Id >= param.id && x.Revision == 999).ToList();
+                    dataAfterUpdate = efSCM.DoHistories.Where(x => x.Id >= param.id && x.Revision == 999).ToList();
                 }
             }
             return Ok(new { status = status, data = dataAfterUpdate, message = message });
@@ -276,7 +269,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/do/{id}")]
         public IActionResult GetHistoryById(int id)
         {
-            var context = _contextDBSCM.DoHistories.Where(x => x.Id == id).FirstOrDefault();
+            var context = efSCM.DoHistories.Where(x => x.Id == id).FirstOrDefault();
             return Ok(context);
         }
 
@@ -290,17 +283,17 @@ namespace DeliveryOrderAPI.Controllers
                 var part = (dynamic)null;
                 if (param.vender == "")
                 {
-                    part = _contextDBSCM.DoPartMasters.ToList();
+                    part = efSCM.DoPartMasters.ToList();
                 }
                 else
                 {
-                    part = _contextDBSCM.DoPartMasters.Where(x => x.VdCode == param.vender).ToList();
+                    part = efSCM.DoPartMasters.Where(x => x.VdCode == param.vender).ToList();
                 }
                 return Ok(part);
             }
             else if (param.type == "vender")
             {
-                var venders = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "VENDER_BOX_CAPACITY").OrderBy(x => x.Description).ToList();
+                var venders = efSCM.DoDictMstrs.Where(x => x.DictType == "VENDER_BOX_CAPACITY").OrderBy(x => x.Description).ToList();
                 return Ok(venders);
             }
             else
@@ -355,7 +348,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/vender/update/detail")]
         public IActionResult UpdateVenderDetail([FromBody] M_UPDATE_VENDER_DETAIL param)
         {
-            DoVenderMaster oVdStd = _contextDBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == param.vender);
+            DoVenderMaster oVdStd = efSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == param.vender);
             try
             {
                 if (oVdStd != null)
@@ -365,11 +358,11 @@ namespace DeliveryOrderAPI.Controllers
                     oVdStd.VdMaxDelivery = param.max;
                     oVdStd.VdRound = param.round;
                     oVdStd.VdProdLead = param.vdProdLead;
-                    _contextDBSCM.DoVenderMasters.Update(oVdStd);
+                    efSCM.DoVenderMasters.Update(oVdStd);
                 }
-                List<DoMaster> contentRound = _contextDBSCM.DoMasters.Where(x => x.VdCode == param.vender).ToList();
+                List<DoMaster> contentRound = efSCM.DoMasters.Where(x => x.VdCode == param.vender).ToList();
                 contentRound.ForEach(x => { x.VdRound = param.round; });
-                int active = _contextDBSCM.SaveChanges();
+                int active = efSCM.SaveChanges();
                 return Ok(new { update = active, message = "" });
             }
             catch (Exception e)
@@ -382,7 +375,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/vender/get/{vender}")]
         public IActionResult GetVenderByCode(string vender)
         {
-            var content = _contextDBSCM.DoVenderMasters.Where(x => x.VdCode == vender).FirstOrDefault();
+            var content = efSCM.DoVenderMasters.Where(x => x.VdCode == vender).FirstOrDefault();
             return Ok(content);
         }
 
@@ -390,7 +383,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/part/get")]
         public IActionResult MasterGetPart([FromBody] M_MASTER_GET_PART param)
         {
-            var content = _contextDBSCM.DoPartMasters.Where(x => x.Partno == param.part).FirstOrDefault();
+            var content = efSCM.DoPartMasters.Where(x => x.Partno == param.part).FirstOrDefault();
             return Ok(content);
         }
 
@@ -398,7 +391,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/part/update")]
         public IActionResult MasterPartUpdate([FromBody] DoPartMaster param)
         {
-            var content = _contextDBSCM.DoPartMasters.FirstOrDefault(x => x.Partno == param.Partno);
+            var content = efSCM.DoPartMasters.FirstOrDefault(x => x.Partno == param.Partno);
             if (content != null)
             {
                 content.BoxQty = param.BoxQty;
@@ -406,9 +399,9 @@ namespace DeliveryOrderAPI.Controllers
                 content.BoxMax = param.BoxMax;
                 content.Pdlt = param.Pdlt;
                 content.Unit = param.Unit;
-                _contextDBSCM.Update(content);
+                efSCM.Update(content);
             }
-            int update = _contextDBSCM.SaveChanges();
+            int update = efSCM.SaveChanges();
             return Ok(new { update = update });
         }
 
@@ -463,7 +456,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/login/supplier")]
         public IActionResult loginSupplier([FromBody] MLogin param)
         {
-            var content = _contextDBSCM.DoVenderMasters.Where(x => x.VdCode == param.username).FirstOrDefault();
+            var content = efSCM.DoVenderMasters.Where(x => x.VdCode == param.username).FirstOrDefault();
             if (content != null)
             {
                 string jwt = serv.CreateToken(param.username);
@@ -516,7 +509,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/privilege/{type}")] // type = employee, supplier
         public IActionResult getPrivilege(string type)
         {
-            return Ok(_contextDBSCM.DoDictMstrs.Where(x => x.DictType == "PRIVILEGE" && x.Code == type).ToList());
+            return Ok(efSCM.DoDictMstrs.Where(x => x.DictType == "PRIVILEGE" && x.Code == type).ToList());
         }
 
         //[HttpPost]
@@ -530,7 +523,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/dict/timeschedule")]
         public IActionResult dictTimeSchedule()
         {
-            var content = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "TIME_SCHEDULE_PS").OrderBy(x => x.DictType);
+            var content = efSCM.DoDictMstrs.Where(x => x.DictType == "TIME_SCHEDULE_PS").OrderBy(x => x.DictType);
             return Ok(content);
         }
 
@@ -538,7 +531,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/vender")]
         public IActionResult GetVender()
         {
-            var content = _contextDBSCM.DoVenderMasters.ToList();
+            var content = efSCM.DoVenderMasters.ToList();
             return Ok(content);
         }
 
@@ -546,8 +539,8 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/partsupply/timescheduledelivery")]
         public IActionResult PartSupplyTimeScheduleDelivery([FromBody] MPartSupplyTimeScheduleDelivery param)
         {
-            var content = _contextDBSCM.DoHistories.Where(x => x.DateVal == param.startDate && x.DoVal > 0 && x.TimeScheduleDelivery != null).ToList();
-            var contentPart = _contextDBSCM.DoPartMasters.ToList();
+            var content = efSCM.DoHistories.Where(x => x.DateVal == param.startDate && x.DoVal > 0 && x.TimeScheduleDelivery != null).ToList();
+            var contentPart = efSCM.DoPartMasters.ToList();
             var res = from a in content.DefaultIfEmpty()
                       join b in contentPart
                       on a.Partno equals b.Partno
@@ -558,7 +551,7 @@ namespace DeliveryOrderAPI.Controllers
                           a.VdCode,
                           a.DoVal,
                           b.Description,
-                          vdDesc = _contextDBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == a.VdCode).VdDesc,
+                          vdDesc = efSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == a.VdCode).VdDesc,
                       };
             return Ok(res);
         }
@@ -597,13 +590,13 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/getListSupplierByBuyer")]
         public IActionResult GetListSupplierByBuyer([FromBody] DoDictMstr param)
         {
-            List<DoDictMstr> suppliers = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == param.Code && x.DictStatus == "999").ToList();
+            List<DoDictMstr> suppliers = efSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == param.Code && x.DictStatus == "999").ToList();
             if (param.RefCode != "" && param.RefCode != null)
             {
                 suppliers = suppliers.Where(x => x.RefCode == param.RefCode).ToList();
             }
             var res = (from vd in suppliers
-                       join vdMstr in _contextDBSCM.DoVenderMasters.ToList()
+                       join vdMstr in efSCM.DoVenderMasters.ToList()
                        on vd.RefCode equals vdMstr.VdCode
                        select new
                        {
@@ -617,7 +610,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/getVenderMasterOfVender/{vdcode}")]
         public IActionResult GetVenderMasterOfVender(string vdcode)
         {
-            var vdMaster = _contextDBSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == vdcode);
+            var vdMaster = efSCM.DoVenderMasters.FirstOrDefault(x => x.VdCode == vdcode);
             return Ok(vdMaster);
         }
 
@@ -625,7 +618,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/getVenderMasterOfVenders")]
         public IActionResult GetVenderMasterOfVenders()
         {
-            var vdMaster = _contextDBSCM.DoVenderMasters.ToList();
+            var vdMaster = efSCM.DoVenderMasters.ToList();
             return Ok(vdMaster);
         }
 
@@ -633,9 +626,9 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/getSupplier/{buyer}")]
         public IActionResult GetSupplier(string buyer)
         {
-            var supplierOfBuyer = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256" && x.DictStatus == "999").ToList();
+            var supplierOfBuyer = efSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256" && x.DictStatus == "999").ToList();
             var listSupplier = (from sp in supplierOfBuyer
-                                join spDict in _contextDBSCM.DoVenderMasters.ToList()
+                                join spDict in efSCM.DoVenderMasters.ToList()
                                 on sp.RefCode equals spDict.VdCode
                                 select new DoVenderMaster
                                 {
@@ -697,13 +690,13 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             string empCode = param.empCode;
             double doVal = param.doVal;
             double doPrev = param.doPrev;
-            List<DoHistoryDev> PrevContent = _contextDBSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
+            List<DoHistoryDev> PrevContent = efSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
             if (PrevContent.Count > 0)
             {
                 DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
                 PrevItem.DoVal = doVal;
-                _contextDBSCM.DoHistoryDevs.Update(PrevItem);
-                update = _contextDBSCM.SaveChanges();
+                efSCM.DoHistoryDevs.Update(PrevItem);
+                update = efSCM.SaveChanges();
                 if (update > 0)
                 {
                     SqlCommand sql = new SqlCommand();
@@ -723,7 +716,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         {
             string dtTarget = param.dtTarget;
             string vdCode = param.vdCode;
-            List<DoHistoryDev> ListDO = _contextDBSCM.DoHistoryDevs.Where(x => x.DateVal == dtTarget && x.Revision == 999 && x.DoVal > 0 && x.VdCode == vdCode).ToList();
+            List<DoHistoryDev> ListDO = efSCM.DoHistoryDevs.Where(x => x.DateVal == dtTarget && x.Revision == 999 && x.DoVal > 0 && x.VdCode == vdCode).ToList();
             return Ok(ListDO);
         }
 
@@ -745,7 +738,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         {
             string date = param.date;
             string part = param.part;
-            var res = _contextDBSCM.DoHistoryDevs.Where(x => x.DateVal == date && x.Partno == part).OrderByDescending(x => x.InsertDt).ToList();
+            var res = efSCM.DoHistoryDevs.Where(x => x.DateVal == date && x.Partno == part).OrderByDescending(x => x.InsertDt).ToList();
             return Ok(res);
         }
 
@@ -757,13 +750,13 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             string dictCode = obj.Code;
             int action = 0;
             string message = "";
-            DoDictMstr oDictHoliday = _contextDBSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == dictType && x.Code == obj.Code);
+            DoDictMstr oDictHoliday = efSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == dictType && x.Code == obj.Code);
             if (oDictHoliday != null)
             {
                 oDictHoliday.Description = obj.Description;
                 oDictHoliday.UpdateDate = DateTime.Now;
-                _contextDBSCM.DoDictMstrs.Update(oDictHoliday);
-                action = _contextDBSCM.SaveChanges();
+                efSCM.DoDictMstrs.Update(oDictHoliday);
+                action = efSCM.SaveChanges();
             }
             else
             {
@@ -775,8 +768,8 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 oDictHoliday.CreateDate = DateTime.Now;
                 oDictHoliday.UpdateDate = DateTime.Now;
                 oDictHoliday.DictStatus = "pending";
-                _contextDBSCM.DoDictMstrs.Add(oDictHoliday);
-                action = _contextDBSCM.SaveChanges();
+                efSCM.DoDictMstrs.Add(oDictHoliday);
+                action = efSCM.SaveChanges();
             }
             return Ok(new
             {
@@ -789,7 +782,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [Route("/CALENDAR/GET/{yyyy}")]
         public IActionResult CalendarGetByYear(string yyyy)
         {
-            List<DoDictMstr> rCalendar = _contextDBSCM.DoDictMstrs.Where(x => x.DictType == "holiday" && x.Code.StartsWith(yyyy)).ToList();
+            List<DoDictMstr> rCalendar = efSCM.DoDictMstrs.Where(x => x.DictType == "holiday" && x.Code.StartsWith(yyyy)).ToList();
             return Ok(rCalendar);
         }
 
@@ -798,7 +791,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         public IActionResult CalendarGetDateDetail(string ymd)
         {
             DoDictMstr oCalendar = new DoDictMstr();
-            oCalendar = _contextDBSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == "holiday" && x.Code == ymd);
+            oCalendar = efSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == "holiday" && x.Code == ymd);
             return Ok(oCalendar);
         }
 
@@ -809,11 +802,11 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         {
             DoDictMstr oCalendar = new DoDictMstr();
             int action = 0;
-            oCalendar = _contextDBSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == "holiday" && x.Code == ymd);
+            oCalendar = efSCM.DoDictMstrs.FirstOrDefault(x => x.DictType == "holiday" && x.Code == ymd);
             if (oCalendar != null)
             {
-                _contextDBSCM.DoDictMstrs.Remove(oCalendar);
-                action = _contextDBSCM.SaveChanges();
+                efSCM.DoDictMstrs.Remove(oCalendar);
+                action = efSCM.SaveChanges();
             }
             return Ok(new
             {
@@ -824,7 +817,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [HttpPost]
         [Route("/HISTORY/DO")]
         public IActionResult GetHistoryDO([FromBody] DoLogDev obj)
-        {
+      {
             List<DoLogDev> rLogDev = new List<DoLogDev>();
             string date = obj.logToDate;
             string part = obj.logPartNo;
@@ -854,7 +847,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 item.logBox = Convert.ToDouble(dr["LOG_BOX"].ToString());
                 item.logState = dr["LOG_STATE"].ToString();
                 item.logRemark = dr["LOG_REMARK"].ToString();
-                item.logUpdateDate = Convert.ToDateTime(dr["LOG_UPDATE_DATE"].ToString());
+                item.logUpdateDate = Convert.ToDateTime(dr["LOG_UPDATE_DATE"].ToString()); 
                 rLogDev.Add(item);
             }
             return Ok(rLogDev);
@@ -873,23 +866,51 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             string partNo = param.partno;
             string ymd = param.ymd;
             string empCode = param.empCode;
-            double doVal = param.doVal;
+            double doAdj = param.doVal;
             double doPrev = param.doPrev;
-            List<DoHistoryDev> PrevContent = _contextDBSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
+            List<DoHistoryDev> PrevContent = efSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
             if (PrevContent.Count > 0)
             {
-                DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
-                PrevItem.DoVal = doVal;
-                _contextDBSCM.DoHistoryDevs.Update(PrevItem);
-                update = _contextDBSCM.SaveChanges();
-                if (update > 0)
+                string vdCode = PrevContent[0].VdCode!;
+                string ymdTarget = PrevContent[0].DateVal!;
+                DateTime dtStart = DateTime.ParseExact(ymd,"yyyyMMdd",CultureInfo.InvariantCulture);
+                //List<ViDoPlan> oPlanInfos = serv.GetPlans(vdCode, dtStart, dtStart.AddDays(15));
+                SqlCommand SqlGetHistoryDOofPart = new SqlCommand();
+                SqlGetHistoryDOofPart.CommandText = $@"SELECT [PARTNO] ,[DATE_VAL] ,[PLAN_VAL] ,[DO_VAL] ,[STOCK_VAL] FROM [dbSCM].[dbo].[DO_HISTORY_DEV] WHERE RUNNING_CODE = (  SELECT TOP(1) RUNNING_CODE FROM [dbSCM].[dbo].[DO_HISTORY_DEV] ORDER BY CAST(RUNNING_CODE AS INT ) DESC)  AND DATE_VAL >= '{DateTime.Now.ToString("yyyyMMdd")}' AND REVISION = '999' AND PARTNO = '{partNo}' order by DATE_VAL ASC";
+                DataTable dt = dbSCM.Query(SqlGetHistoryDOofPart);
+                int StockSim = 0;
+                foreach (DataRow dr in dt.Rows)
                 {
-                    SqlCommand sqlInsertLog = new SqlCommand();
-                    sqlInsertLog.CommandText = @"INSERT INTO [dbo].[DO_LOG_DEV] ([DO_RUNNING],[DO_REV],[LOG_PART_NO],[LOG_VD_CODE] ,[LOG_PROD_LEAD],[LOG_TYPE],[LOG_FROM_DATE],[LOG_FROM_STOCK],[LOG_FROM_PLAN],[LOG_NEXT_DATE],[LOG_NEXT_STOCK],[LOG_TO_DATE],[LOG_DO],[LOG_BOX],[LOG_STATE],[LOG_REMARK],[LOG_CREATE_DATE],[LOG_UPDATE_DATE],[LOG_UPDATE_BY])
-     VALUES
-           ('" + runningCode + "','" + PrevItem.Rev + "','" + partNo + "','" + PrevItem.VdCode + "','2','EDIT_DO','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.PlanVal + "','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.DateVal + "','" + doVal + "','0','referent','edit_do',GETDATE(),GETDATE(),'" + empCode + "') ";
-                    int insertLog = dbSCM.ExecuteNonCommand(sqlInsertLog);
+                    string YMDLoop = dr["DATE_VAL"].ToString()!;
+                    int DOLoop = oHelper.ConvStr2Int(dr["DO_VAL"].ToString()!);
+                    if (YMDLoop == ymdTarget)
+                    {
+                        DOLoop = oHelper.ConvDBToInt(doAdj);
+                    }
+                    int PlnLoop = oHelper.ConvStr2Int(dr["PLAN_VAL"].ToString()!);
+                    //ViDoPlan oPlanInfo = oPlanInfos.FirstOrDefault(x=>x.Partno == partNo && x.Prdymd == PlnLoop.ToString("yyyyMMdd") && x.Vender == vdCode);
+                    //if (oPlanInfo != null)
+                    //{
+                    //    PlnLoop = oHelper.ConvUnDec2Int(oPlanInfo.Qty);
+                    //}
+                    StockSim = (StockSim + DOLoop) - PlnLoop;
+                    SqlCommand SqlUpdate = new SqlCommand();
+                    SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_HISTORY_DEV]  SET DO_VAL = '{DOLoop}',STOCK_VAL = '{StockSim}' WHERE RUNNING_CODE = '{param.runningCode}' AND DATE_VAL = '{YMDLoop}' AND PARTNO = '{partNo}'";
+                    int actUpdate = dbSCM.ExecuteNonCommand(SqlUpdate);
+                    Console.WriteLine($"DATE : {YMDLoop} PLAN : {PlnLoop} , DO : {DOLoop} SIM : {StockSim})");
                 }
+                //           DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
+                //           PrevItem.DoVal = doVal;
+                //           efSCM.DoHistoryDevs.Update(PrevItem);
+                //           update = efSCM.SaveChanges();
+                //           if (update > 0)
+                //           {
+                //               SqlCommand sqlInsertLog = new SqlCommand();
+                //               sqlInsertLog.CommandText = @"INSERT INTO [dbo].[DO_LOG_DEV] ([DO_RUNNING],[DO_REV],[LOG_PART_NO],[LOG_VD_CODE] ,[LOG_PROD_LEAD],[LOG_TYPE],[LOG_FROM_DATE],[LOG_FROM_STOCK],[LOG_FROM_PLAN],[LOG_NEXT_DATE],[LOG_NEXT_STOCK],[LOG_TO_DATE],[LOG_DO],[LOG_BOX],[LOG_STATE],[LOG_REMARK],[LOG_CREATE_DATE],[LOG_UPDATE_DATE],[LOG_UPDATE_BY])
+                //VALUES
+                //      ('" + runningCode + "','" + PrevItem.Rev + "','" + partNo + "','" + PrevItem.VdCode + "','2','EDIT_DO','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.PlanVal + "','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.DateVal + "','" + doVal + "','0','referent','edit_do',GETDATE(),GETDATE(),'" + empCode + "') ";
+                //               int insertLog = dbSCM.ExecuteNonCommand(sqlInsertLog);
+                //           }
             }
             return Ok(new
             {
@@ -925,11 +946,11 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 UpdateBy = param.updateBy,
                 UpdateDate = DateTime.Now
             };
-            int exist = _contextDBSCM.DoPartMasters.Where(x => x.Partno == drawing && x.Cm == cm && x.VdCode == vender).Count();
+            int exist = efSCM.DoPartMasters.Where(x => x.Partno == drawing && x.Cm == cm && x.VdCode == vender).Count();
             if (exist == 0)
             {
-                _contextDBSCM.Add(oPart);
-                int add = _contextDBSCM.SaveChanges();
+                efSCM.Add(oPart);
+                int add = efSCM.SaveChanges();
                 status = add > 0 ? true : false;
             }
             return Ok(new
@@ -950,5 +971,74 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 version
             });
         }
+
+
+        [HttpGet]
+        [Route("/DOWarining")]
+
+        public IActionResult DOWarining()
+        {
+
+            DateTime dtNow = DateTime.Now;
+            string nbr = dtNow.ToString("yyyyMMdd");
+            int rev = 0;
+            DoHistoryDev prev = efSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
+
+            if (prev != null)
+            {
+                rev = (int)prev.Rev!;
+            }
+            rev++;
+
+            MODEL_GET_DO DOInfo = serv.CalDO(false, "", null, nbr, rev, false , true);
+
+            List<MRESULTDO> result = DOInfo.data.Where(x => x.Stock < 0).ToList();
+
+
+            return Ok(result);
+
+
+        }
+
+
+        //private List<MRESULTDO> findStockIsMinus(List<MRESULTDO> data)
+        //{
+
+        //    List<MRESULTDO> result = new List<MRESULTDO>();
+
+            
+
+        //    string getVender = @"SELECT [VD_CODE],[VD_DESC],[VD_PROD_LEAD]
+        //                         FROM [dbSCM].[dbo].[DO_VENDER_MASTER]";
+
+        //    SqlCommand sql = new SqlCommand();
+
+        //    sql.CommandText = getVender;
+        //    DataTable dt = dbSCM.Query(sql);
+        //    if (dt.Rows.Count > 0)
+        //    {
+        //        foreach (DataRow dr in dt.Rows)
+        //        {
+        //            List<MRESULTDO> rawData = new List<MRESULTDO>();
+
+        //            string vdCode = dr["VD_CODE"].ToString();
+        //            DateTime stDate = DateTime.Now;
+        //            DateTime enDate = DateTime.Now.AddDays(Convert.ToInt16(dr["VD_PROD_LEAD"])-1);
+
+
+        //            rawData = data.Where(x => x.Date >= stDate &&  x.Date <= enDate && x.vdCode == vdCode && x.Stock < 0).ToList();
+
+        //            result.AddRange(rawData);
+
+
+
+        //        }
+        //    }
+
+
+        //    return result;
+        //}
+
+
     }
 }

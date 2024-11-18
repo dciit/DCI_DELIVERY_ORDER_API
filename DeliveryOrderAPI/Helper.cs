@@ -15,7 +15,29 @@ namespace DeliveryOrderAPI
                 return 0;
             }
         }
+        public int ConvDec2Int(decimal val)
+        {
+            try
+            {
+                return Convert.ToInt32((decimal)val);   
+            }
+            catch
+            {
+                return 0;
+            }
+        }
 
+        public int ConvUnDec2Int(decimal? val)
+        {
+            try
+            {
+                return Convert.ToInt32((decimal)val);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
         public int ConvDBToInt(double val)
         {
             try
@@ -61,7 +83,17 @@ namespace DeliveryOrderAPI
                 return 0;
             }
         }
-
+        public int ConvStr2Int(string val)
+        {
+            try
+            {
+                return Convert.ToInt32(val);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
         public double ConvStrToDB(string val)
         {
             try
