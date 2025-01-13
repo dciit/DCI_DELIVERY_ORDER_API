@@ -28,6 +28,11 @@ public class OraConnectDB
             connStr = @"Data Source=(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.214.124)(PORT = 1532)) (CONNECT_DATA = (SID = DCIOS02)));User Id=mc;Password=mc";
 
         }
+        else if (DBSource == "ALPHAPLAN")
+        {
+            connStr = @"Data Source=(DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = 192.168.214.123)(PORT = 1531)) (CONNECT_DATA = (SID = DCIOS01)));User Id=plan;Password=plan";
+
+        }
     }
 
     private bool useDB = true;

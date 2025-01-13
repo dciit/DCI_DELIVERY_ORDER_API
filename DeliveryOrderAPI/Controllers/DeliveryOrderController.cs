@@ -1,10 +1,12 @@
-﻿
-using Azure;
+﻿using Azure;
 using DeliveryOrderAPI.Contexts;
 using DeliveryOrderAPI.Models;
 using DeliveryOrderAPI.Params;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.SqlServer.Server;
+using Microsoft.VisualBasic;
+using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Data;
 using System.Drawing.Drawing2D;
@@ -12,6 +14,8 @@ using System.Globalization;
 using System.Net;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Security.Policy;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace DeliveryOrderAPI.Controllers
 {
@@ -895,9 +899,11 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                     //}
                     StockSim = (StockSim + DOLoop) - PlnLoop;
                     SqlCommand SqlUpdate = new SqlCommand();
-                    SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_HISTORY_DEV]  SET DO_VAL = '{DOLoop}',STOCK_VAL = '{StockSim}' WHERE RUNNING_CODE = '{param.runningCode}' AND DATE_VAL = '{YMDLoop}' AND PARTNO = '{partNo}'";
+                    SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_HISTORY_DEV]  SET DO_VAL = '{DOLoop}',STOCK_VAL = '{StockSim}' WHERE RUNNING_CODE = '{param.runningCode}' AND DATE_VAL = '{YMDLoop}' AND PARTNO = '{partNo}' AND REVISION = '999'";
                     int actUpdate = dbSCM.ExecuteNonCommand(SqlUpdate);
                     Console.WriteLine($"DATE : {YMDLoop} PLAN : {PlnLoop} , DO : {DOLoop} SIM : {StockSim})");
+
+                    update = actUpdate;
                 }
                 //           DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
                 //           PrevItem.DoVal = doVal;
@@ -959,6 +965,54 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             });
         }
 
+
+        [HttpPost]
+        [Route("/AddPartMasterAll")]
+        public IActionResult AddPartMasterAll([FromBody] List<DOPartNumberForPU> param)
+        {
+            bool status = false;
+
+            foreach(DOPartNumberForPU item in param)
+            {
+                string drawing = item.partno.Split(" ")[0];
+                string cm = item.cm;
+                string vender = item.vdcode;
+                int boxMin = item.minQty;
+                int boxQty = item.boxQty;
+                string desc = item.desc;
+                string unit = "PCS";
+                DoPartMaster oPart = new DoPartMaster()
+                {
+                    Active = "ACTIVE",
+                    BoxMax = 99999,
+                    BoxMin = boxMin,
+                    BoxQty = boxQty,
+                    Cm = cm,
+                    Description = desc,
+                    Partno = drawing,
+                    Diameter = "",
+                    VdCode = vender,
+                    Pdlt = 2,
+                    Unit = unit,
+                    UpdateBy = item.updateBy,
+                    UpdateDate = DateTime.Now
+                };
+                int exist = efSCM.DoPartMasters.Where(x => x.Partno == drawing && x.Cm == cm && x.VdCode == vender).Count();
+                if (exist == 0)
+                {
+                    efSCM.Add(oPart);
+                    int add = efSCM.SaveChanges();
+                    //status = add > 0 ? true : false;
+                }
+
+            }
+        
+            return Ok(new
+            {
+                status = true
+            });
+        }
+
         [HttpPost]
         [Route("/checkversion")]
         public IActionResult CheckVersionSystem([FromBody] ParamChkVer param)
@@ -974,39 +1028,169 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
 
 
         [HttpGet]
-        [Route("/DOWarining")]
+        [Route("/BatchDOWarining")]
 
-        public IActionResult DOWarining()
+        public IActionResult BatchDOWarining()
         {
 
             DateTime dtNow = DateTime.Now;
             string nbr = dtNow.ToString("yyyyMMdd");
+
+            string runningLog = dtNow.ToString("yyyyMMddHHmm");
+
             int rev = 0;
             DoHistoryDev prev = efSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
+
 
             if (prev != null)
             {
                 rev = (int)prev.Rev!;
             }
-            rev++;
 
-            MODEL_GET_DO DOInfo = serv.CalDO(false, "", null, nbr, rev, false , true);
+            rev++; 
 
-            List<MRESULTDO> result = DOInfo.data.Where(x => x.Stock < 0).ToList();
+            MODEL_GET_DO DOInfo = serv.CalDO(false, "", null, nbr, rev, false, true);
+
+            List<MRESULTDO> data = DOInfo.data.Where(x => x.Stock < 0).ToList();
+
+            var finalData =
+                          (from a in data
+                           join b in DOInfo.PartMaster on new { X1 = a.PartNo, X2 = a.vdCode } equals new { X1 = b.Partno, X2 = b.VdCode }
+                           select new
+                           {
+                               date = a.Date,
+                               vdCode = a.vdCode,
+                               vdName = a.vdName,
+                               partNo = a.PartNo,
+                               cm = b.Cm,
+                               description = b.Description,
+                               stock = a.Stock,
+                           }).Distinct().ToList();
 
 
-            return Ok(result);
+
+            SqlCommand sqlSelectPrev = new SqlCommand();
+            sqlSelectPrev.CommandText = $@"SELECT TOP(1) [REVESION] FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING]
+                                           WHERE [REVESION] = '999'";
+            DataTable dtPrev = dbSCM.Query(sqlSelectPrev);
+
+
+            int resultInsert = 0;
+            foreach (var item in finalData) { 
+
+                SqlCommand sqlInsert = new SqlCommand();
+                sqlInsert.CommandText = $@"INSERT INTO DO_LOG_STOCK_WARNING ([LOG_RUNNING],[LOG_PARTNO],[LOG_CM],[LOG_DESC],[LOG_VD_CODE],[LOG_VD_NAME],[LOG_STOCK],[LOG_DATE],[REVESION],[LOG_CREATE_DATE],[LOG_CREATE_BY],[LOG_UPDATE_DATE],[LOG_UPADTE_BY]) 
+                   VALUES ('{runningLog}','{item.partNo}','{item.cm}','{item.description}','{item.vdCode}','{item.vdName}','{item.stock}','{item.date}',
+                                    {999},GETDATE(),'system',GETDATE(),'system')";
+                int insert = dbSCM.ExecuteNonCommand(sqlInsert);
+                if (insert > 0)
+                {
+                    resultInsert = resultInsert + 1;
+                }
+            }
+        
+            if(resultInsert > 0 && dtPrev.Rows.Count > 0)
+            {
+           
+                SqlCommand SqlUpdate = new SqlCommand();
+                SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_LOG_STOCK_WARNING]  
+                                    SET REVESION = '1',LOG_UPDATE_DATE = GETDATE() 
+                                    WHERE REVESION = '999' and LOG_RUNNING != {runningLog}";
+                int actUpdate = dbSCM.ExecuteNonCommand(SqlUpdate);
+            }
+
+            //if(resultInsert > 0)
+            //{
+            //    SqlCommand SqlUpdate = new SqlCommand();
+            //    SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_LOG_STOCK_WARNING]  
+            //                        SET REVESION = '1',LOG_UPDATE_DATE = GETDATE() 
+            //                        WHERE REVESION = '999' and LOG_RUNNING != {runningLog}";
+            //    int actUpdate = dbSCM.ExecuteNonCommand(SqlUpdate);
+            //}
+
+    
+
+
+            return Ok();
 
 
         }
 
+
+
+
+
+
+        [HttpGet]
+        [Route("/DOWarining")]
+
+        public IActionResult DOWarining()
+        {
+
+           List<StockWarning> stockWarnings = new List<StockWarning>();
+
+            //var finalData =
+            //              (from a in data
+            //               join b in DOInfo.PartMaster on a.PartNo equals b.Partno
+            //               select new
+            //               {
+            //                   date = a.Date,
+            //                   vdCode = a.vdCode,
+            //                   vdName = a.vdName,
+            //                   partNo = a.PartNo,
+            //                   cm = b.Cm,
+            //                   description = b.Description,
+            //                   stock = a.Stock,
+            //               }).ToList();
+
+
+
+            SqlCommand sqlSelectShortageStock = new SqlCommand();
+            sqlSelectShortageStock.CommandText = $@"SELECT [LOG_ID],[LOG_RUNNING],[LOG_PARTNO],[LOG_CM],[LOG_DESC]
+              ,[LOG_VD_CODE],[LOG_VD_NAME],[LOG_STOCK],[LOG_DATE],[REVESION],[LOG_CREATE_DATE]
+              ,[LOG_CREATE_BY],[LOG_UPDATE_DATE],[LOG_UPADTE_BY]
+             FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING] 
+             where [REVESION] = 999";
+            DataTable dtSelectShortageStock = dbSCM.Query(sqlSelectShortageStock);
+
+            if(dtSelectShortageStock.Rows.Count > 0)
+            {
+                foreach (DataRow dr in dtSelectShortageStock.Rows)
+                {
+                    StockWarning warning = new StockWarning();
+            
+                    string format = "yyyyMMddHHmm";
+                    warning.dateRound = DateTime.ParseExact(dr["LOG_RUNNING"].ToString(), format, CultureInfo.InvariantCulture); ;
+                    warning.date = Convert.ToDateTime(dr["LOG_DATE"]);
+                    warning.vdCode = dr["LOG_VD_CODE"].ToString();
+                    warning.vdName = dr["LOG_VD_NAME"].ToString();
+                    warning.partNo = dr["LOG_PARTNO"].ToString();
+                    warning.cm = dr["LOG_CM"].ToString();
+                    warning.description = dr["LOG_DESC"].ToString();
+                    warning.stock = Convert.ToInt32(dr["LOG_STOCK"]);
+
+                    stockWarnings.Add(warning);
+
+                }
+            }
+
+
+        
+
+
+
+
+            return Ok(stockWarnings);
+
+
+        }
 
         //private List<MRESULTDO> findStockIsMinus(List<MRESULTDO> data)
         //{
 
         //    List<MRESULTDO> result = new List<MRESULTDO>();
 
-            
+
 
         //    string getVender = @"SELECT [VD_CODE],[VD_DESC],[VD_PROD_LEAD]
         //                         FROM [dbSCM].[dbo].[DO_VENDER_MASTER]";
@@ -1038,6 +1222,47 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
 
         //    return result;
         //}
+
+
+
+        [HttpGet]
+        [Route("/getPartMstrPU/{vdcode}/{empcode}")]
+
+        public IActionResult getPartMstrPU(string vdcode , string empcode)
+        {
+
+            List<DOPartNumberForPU> dOPartNumberForPUs = new List<DOPartNumberForPU>();
+
+            OracleCommand cmd = new();
+            cmd.CommandText = @"SELECT HTCODE , PARTNO, BRUSN as CM, KOUBHM as Description, SYUYO BOX_QTY, MINQTY MIN_BOX
+                                FROM ND_ZUBGPU_WK
+                                where HTCODE = '" + vdcode + "'";
+            DataTable dt = dbAlpha.Query(cmd);
+
+            if(dt.Rows.Count > 0)
+            {
+                foreach(DataRow dr in dt.Rows)
+                {
+                    DOPartNumberForPU dOPartNumberForPU = new DOPartNumberForPU();
+
+                    dOPartNumberForPU.vdcode = vdcode;
+                    dOPartNumberForPU.partno = dr["PARTNO"].ToString().Trim() + " " + dr["CM"].ToString().Trim();
+                    dOPartNumberForPU.cm = dr["CM"].ToString().Trim();
+                    dOPartNumberForPU.desc = dr["Description"].ToString();
+                    dOPartNumberForPU.boxQty = Convert.ToInt16(dr["BOX_QTY"]);
+                    dOPartNumberForPU.minQty = Convert.ToInt16(dr["MIN_BOX"]);
+                    dOPartNumberForPU.updateBy = empcode;
+
+                    dOPartNumberForPUs.Add(dOPartNumberForPU);
+
+                }
+
+            }
+
+
+
+            return Ok(dOPartNumberForPUs);
+        }
 
 
     }

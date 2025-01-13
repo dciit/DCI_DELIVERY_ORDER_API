@@ -41,3 +41,15 @@ public partial class ViDoPlan
 
     public double Consumption { get; set; }
 }
+
+public class DoPlanP91
+{
+    public string? wcno { get; set; }
+
+    public string? prdymd { get; set; }
+
+    public string? model { get; set; }
+
+
+    public decimal? Qty { get; set;}
+}
