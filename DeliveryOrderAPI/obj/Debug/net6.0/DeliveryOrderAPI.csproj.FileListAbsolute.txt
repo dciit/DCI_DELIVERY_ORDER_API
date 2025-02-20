@@ -189,6 +189,13 @@ D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\refint\DeliveryO
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.pdb
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.genruntimeconfig.cache
 D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\ref\DeliveryOrderAPI.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.csproj.AssemblyReference.cache
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.GeneratedMSBuildEditorConfig.editorconfig
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.AssemblyInfoInputs.cache
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.AssemblyInfo.cs
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.csproj.CoreCompileInputs.cache
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cs
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cache
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\appsettings.Development.json
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\appsettings.json
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\DeliveryOrderAPI.exe
@@ -231,6 +238,8 @@ D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Microso
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Mono.TextTemplating.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Newtonsoft.Json.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Oracle.ManagedDataAccess.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Pipelines.Sockets.Unofficial.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\StackExchange.Redis.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.Swagger.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Swashbuckle.AspNetCore.SwaggerUI.dll
@@ -266,13 +275,6 @@ D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\runtime
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\runtimes\win\lib\net6.0\System.Security.Cryptography.ProtectedData.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\runtimes\browser\lib\net6.0\System.Text.Encodings.Web.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\runtimes\win\lib\net6.0\System.Windows.Extensions.dll
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.csproj.AssemblyReference.cache
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.GeneratedMSBuildEditorConfig.editorconfig
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.AssemblyInfoInputs.cache
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.AssemblyInfo.cs
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.csproj.CoreCompileInputs.cache
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cs
-D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.MvcApplicationPartsAssemblyInfo.cache
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\staticwebassets\msbuild.DeliveryOrderAPI.Microsoft.AspNetCore.StaticWebAssets.props
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\staticwebassets\msbuild.build.DeliveryOrderAPI.props
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\staticwebassets\msbuild.buildMultiTargeting.DeliveryOrderAPI.props

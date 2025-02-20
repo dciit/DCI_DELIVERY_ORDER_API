@@ -15,6 +15,8 @@ public partial class DoHistoryDev
 
     public string? Partno { get; set; }
 
+    public string? Cm { get; set; }
+
     public string? DateVal { get; set; }
 
     public double? PlanVal { get; set; }

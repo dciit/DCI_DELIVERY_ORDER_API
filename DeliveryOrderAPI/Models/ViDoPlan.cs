@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Identity.Client;
+using System;
 using System.Collections.Generic;
 
 namespace DeliveryOrderAPI.Models;
@@ -53,3 +54,54 @@ public class DoPlanP91
 
     public decimal? Qty { get; set;}
 }
+
+
+
+
+public class DoResPartList
+{
+    public int PdLeadTime { get; set; }
+    public string MODEL { get; set; }
+    public string PARTNO { get; set; }
+    public string CM { get; set; }
+    public string PARTNAME { get; set; }
+    public string ROUTE { get; set; }
+    public string CATMAT { get; set; }
+    public int EXP { get; set; }
+    public decimal REQQTY { get; set; }
+    public string WHUNIT { get; set; }
+    public string VENDER { get; set; }
+    public decimal RATIO { get; set; }
+}
+
+
+
+
+//public class DoPlanResult
+//{   
+//    public string WCNO { get; set; }
+
+//    public string PRDYM { get; set; }
+
+//    public string PRDYMD { get; set; }
+//    public int PdLeadTime { get; set; }
+
+//    public string PRDLTYMD { get; set; }
+//    public string MODEL { get; set; }
+
+
+//    public decimal QTY { get; set; }
+//    public string PARTNO { get; set; }
+//    public string CM { get; set; }
+//    public string PARTNAME { get; set; }
+//    public string ROUTE { get; set; }
+//    public string CATMAT { get; set; }
+//    public int EXP { get; set; }
+//    public decimal REQQTY { get; set; }
+//    public string WHUNIT { get; set; }
+//    public string VENDER { get; set; }
+//    public decimal RATIO { get; set; }
+
+//    public decimal CONSUMPTION { get; set; }
+//}
+

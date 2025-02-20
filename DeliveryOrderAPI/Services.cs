@@ -3,13 +3,23 @@ using DeliveryOrderAPI.Models;
 using Microsoft.Data.SqlClient;
 using Microsoft.IdentityModel.Tokens;
 using Oracle.ManagedDataAccess.Client;
+using StackExchange.Redis;
 using System;
 using System.Data;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Reflection;
+using System.Runtime.Intrinsics.Arm;
 using System.Security.Claims;
+using StackExchange.Redis;
+using System.Text.Json;
+using Newtonsoft.Json.Linq;
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using JsonSerializer = System.Text.Json.JsonSerializer;
+using System.Reflection.Emit;
+
 namespace DeliveryOrderAPI
 {
     public class Services
@@ -21,6 +31,8 @@ namespace DeliveryOrderAPI
         private OraConnectDB dbAlpha2 = new("ALPHA02");
         private OraConnectDB dbAlphaPlan = new("ALPHAPLAN");
         private Helper oHelper = new Helper();
+        private string redisHost = "192.168.226.85";
+        private string redisPort = "6379";
         public Services(DBSCM dBSCM, DBHRM dBHRM)
         {
             _DBSCM = dBSCM;
@@ -56,12 +68,41 @@ namespace DeliveryOrderAPI
                                        }).ToList();
             return res;
         }
-        public List<MStockAlpha> GetStockPS8AM(string _Vender = "")
+        //public List<MStockAlpha> GetStockPS8AM(string _Vender = "")
+        //{
+        //    List<MStockAlpha> res = new List<MStockAlpha>();
+        //    SqlCommand sql = new SqlCommand();
+        //    sql.CommandText = @"SELECT PARTNO,STOCK,CM FROM [dbSCM].[dbo].[DO_STOCK_ALPHA] WHERE DATE_PD = FORMAT(DATEADD(hour,-8,GETDATE()),'yyyy-MM-dd') AND VDCODE = @VDCODE AND REV = 999";
+        //    sql.Parameters.Add(new SqlParameter("VDCODE", _Vender));
+        //    DataTable dt = dbSCM.Query(sql);
+        //    foreach (DataRow dr in dt.Rows)
+        //    {
+        //        try
+        //        {
+        //            res.Add(new MStockAlpha()
+        //            {
+        //                Part = dr["PARTNO"].ToString().Trim(),
+        //                Stock = oHelper.ConvStrToDB(dr["STOCK"].ToString()),
+        //                Cm = dr["CM"].ToString().Trim()
+        //            });
+        //        }
+        //        catch (Exception e)
+        //        {
+        //            Console.WriteLine(e);
+        //        }
+        //    }
+        //    return res;
+        //}
+
+
+        public List<MStockAlpha> GetStockPS8AM(string partno, string cm)
         {
             List<MStockAlpha> res = new List<MStockAlpha>();
             SqlCommand sql = new SqlCommand();
-            sql.CommandText = @"SELECT PARTNO,STOCK,CM FROM [dbSCM].[dbo].[DO_STOCK_ALPHA] WHERE DATE_PD = FORMAT(DATEADD(hour,-8,GETDATE()),'yyyy-MM-dd') AND VDCODE = @VDCODE AND REV = 999";
-            sql.Parameters.Add(new SqlParameter("VDCODE", _Vender));
+            sql.CommandText = @"SELECT PARTNO,STOCK,CM FROM [dbSCM].[dbo].[DO_STOCK_ALPHA] WHERE DATE_PD = FORMAT(DATEADD(hour,-8,GETDATE()),'yyyy-MM-dd') AND PARTNO = @PARTNO AND CM = @CM AND REV = 999";
+            //sql.CommandText = @"SELECT PARTNO,STOCK,CM FROM [dbSCM].[dbo].[DO_STOCK_ALPHA] WHERE DATE_PD = '2025-02-05' AND PARTNO = @PARTNO AND CM = @CM AND REV = 999";
+            sql.Parameters.Add(new SqlParameter("PARTNO", partno));
+            sql.Parameters.Add(new SqlParameter("CM", cm));
             DataTable dt = dbSCM.Query(sql);
             foreach (DataRow dr in dt.Rows)
             {
@@ -198,129 +239,171 @@ namespace DeliveryOrderAPI
         }
         public List<ViDoPlan> GetPlans(string supplier, DateTime sDate, DateTime fDate)
         {
-            List<ViDoPlan> res = new List<ViDoPlan>();
-            SqlCommand sql = new SqlCommand();
-            sql.CommandText = @"SELECT PRDYMD,PARTNO,CM,VENDER,ROUND(SUM(CONSUMPTION),0)  AS CONSUMPTION
-                                         FROM [dbSCM].[dbo].[vi_DO_Plan]
-                                         WHERE PRDYMD >= @SDATE 
-                                         AND PRDYMD <= @FDATE AND VENDER = @SUPPLIER  GROUP BY PRDYMD,PARTNO,CM,VENDER ORDER BY PRDYMD ASC";
-            sql.Parameters.Add(new SqlParameter("@SDATE", sDate.ToString("yyyyMMdd")));
-            sql.Parameters.Add(new SqlParameter("@FDATE", fDate.ToString("yyyyMMdd")));
-            sql.Parameters.Add(new SqlParameter("@SUPPLIER", supplier));
-            DataTable dt = dbSCM.Query(sql);
-            if (dt.Rows.Count > 0)
+
+
+
+
+            //********* (1) GET PLAN [NEW] ***********
+
+            List<DoPlanP91> doPlanP91s = new List<DoPlanP91>();
+            OracleCommand cmd = new();
+            cmd.CommandText = @$"SELECT  WCNO, PRDYMD, MODEL, SUM(QTY) QTY FROM(    
+                                    SELECT        WCNO, MODEL, PRDYMD, SUM(QTY) AS QTY
+                                        FROM            GSD_ACTPLN
+                                        WHERE        (PRDYMD BETWEEN '{sDate.ToString("yyyyMMdd")}' AND '{fDate.ToString("yyyyMMdd")}') AND (DATA_TYPE IN ('1', '2', '4', '5'))
+                                        GROUP BY WCNO, MODEL, PRDYMD
+                                        UNION ALL
+                                        SELECT        WCNO, MODEL, PRDYMD, SUM(QTY) * - 1 AS QTY
+                                        FROM            GSD_ACTPLN   AL_GSD_ACTPLN_1
+                                        WHERE        (PRDYMD BETWEEN '{sDate.ToString("yyyyMMdd")}' AND '{fDate.ToString("yyyyMMdd")}') AND (DATA_TYPE IN ('3'))
+                                        GROUP BY WCNO, MODEL, PRDYMD
+                                    )
+                                    WHERE LENGTH(WCNO) = 3 AND WCNO <> '900' 
+                                    GROUP BY WCNO, PRDYMD, MODEL 
+                                   ";
+            DataTable dtP91 = dbAlphaPlan.Query(cmd);
+            if (dtP91.Rows.Count > 0)
             {
-                foreach (DataRow dr in dt.Rows)
+                foreach (DataRow dr in dtP91.Rows)
                 {
-                    ViDoPlan item = new ViDoPlan();
-                    item.Qty = Convert.ToDecimal(dr["CONSUMPTION"].ToString());
-                    item.Prdymd = dr["PRDYMD"].ToString();
-                    item.Partno = dr["PARTNO"].ToString();
-                    item.Cm = dr["CM"].ToString();
-                    res.Add(item);
+                    DoPlanP91 item = new DoPlanP91();
+                    item.wcno = dr["WCNO"].ToString().Trim();
+                    item.Qty = Convert.ToDecimal(dr["QTY"].ToString());
+                    item.model = dr["MODEL"].ToString().Trim();
+                    item.prdymd = dr["PRDYMD"].ToString().Trim();
+                    doPlanP91s.Add(item);
+
                 }
             }
 
-            //********* UPDATE QUERY GET PLAN [NEW] ***********
+            //********* (2) GET RES_PART_LIST [NEW] ***********
 
-            //List<DoPlanP91> doPlanP91s = new List<DoPlanP91>();
-            //OracleCommand cmd = new();
-            //cmd.CommandText = @"SELECT  WCNO, PRDYMD, MODEL, SUM(QTY) QTY FROM(    
-            //                        SELECT        WCNO, MODEL, PRDYMD, SUM(QTY) AS QTY
-            //                            FROM            GSD_ACTPLN
-            //                            WHERE        (PRDYMD BETWEEN '20250101' AND '99999999') AND (DATA_TYPE IN ('1', '2', '4', '5'))
-            //                            GROUP BY WCNO, MODEL, PRDYMD
-            //                            UNION ALL
-            //                            SELECT        WCNO, MODEL, PRDYMD, SUM(QTY) * - 1 AS QTY
-            //                            FROM            GSD_ACTPLN   AL_GSD_ACTPLN_1
-            //                            WHERE        (PRDYMD BETWEEN '20250101' AND '99999999') AND (DATA_TYPE IN ('3'))
-            //                            GROUP BY WCNO, MODEL, PRDYMD
-            //                        )
-            //                        WHERE LENGTH(WCNO) = 3 AND WCNO <> '900' 
-            //                        GROUP BY WCNO, PRDYMD, MODEL 
-            //                       ";
-            //DataTable dtP91 = dbAlphaPlan.Query(cmd);
-            //if (dtP91.Rows.Count > 0)
-            //{
-            //    foreach (DataRow dr in dtP91.Rows)
-            //    {
-            //        DoPlanP91 item = new DoPlanP91();
-            //        item.wcno = dr["WCNO"].ToString().Trim();
-            //        item.Qty = Convert.ToDecimal(dr["QTY"].ToString());
-            //        item.model = dr["MODEL"].ToString().Trim();
-            //        item.prdymd = dr["PRDYMD"].ToString().Trim();
-            //        doPlanP91s.Add(item);
+            List<ViDoPlan> doBOM = new List<ViDoPlan>();
+            SqlCommand sqlBOM = new SqlCommand();
+            sqlBOM.CommandText = @"SELECT        
+			                      PT.PdLeadTime,
+			                      PL.MODEL,
+			                      PL.PARTNO, 
+			                      PL.CM, 
+                                  PT.Description AS PARTNAME, 
+			                      PL.ROUTE, 
+			                      PL.CATMAT, 
+			                      PL.EXP, 
+			                      PL.REQQTY, 
+			                      PL.WHUNIT, 
+			                      VD.VENDER, 
+			                      VD.RATIO
+                    FROM   dbBCS.dbo.vi_RES_PART_LIST PL
+                    LEFT OUTER JOIN dbo.AL_Part AS PT ON PL.PARTNO = PT.DrawingNo 
+                    LEFT OUTER JOIN dbBCS.dbo.CST_PART_MASTER AS PTS ON PL.PARTNO = PTS.PARTNO 
+                    LEFT OUTER JOIN dbBCS.dbo.vi_RES_VENDER_RATIO AS VD ON PL.PARTNO = VD.PARTNO
+                    WHERE    (PL.ROUTE IN ('D', 'T')) AND (PL.CATMAT IN ('P', 'A', 'R')) AND (PL.EXP IN ('4')) 
+                           and (PL.PARTNO NOT IN (SELECT  APARTNO FROM  dbo.AL_Outside_Master)) AND (PTS.ORDER_TYPE = '1')
+                            and VD.VENDER IS NOT NULL and VD.VENDER = @SUPPLIER ";
+            sqlBOM.Parameters.Add(new SqlParameter("@SUPPLIER", supplier));
+            DataTable dtBOM = dbSCM.Query(sqlBOM);
+            if (dtBOM.Rows.Count > 0)
+            {
+                foreach (DataRow dr in dtBOM.Rows)
+                {
+                    ViDoPlan item = new ViDoPlan();
+                    item.PdLeadTime = Convert.IsDBNull(dr["PdLeadTime"]) ? 2 : Convert.ToInt16(dr["PdLeadTime"]);
+                    item.Model = dr["MODEL"].ToString().Trim();
+                    item.Partno = dr["PARTNO"].ToString().Trim();
+                    item.Cm = dr["CM"].ToString().Trim();
+                    item.Partname = Convert.IsDBNull(dr["PARTNAME"]) ? "" : dr["PARTNAME"].ToString().Trim();
+                    item.Route = dr["ROUTE"].ToString().Trim();
+                    item.Catmat = dr["CATMAT"].ToString();
+                    item.Exp = dr["EXP"].ToString();
+                    item.Reqqty = Convert.ToDecimal(dr["REQQTY"].ToString());
+                    item.Whunit = dr["WHUNIT"].ToString();
+                    item.Vender = dr["VENDER"].ToString();
+                    item.Ratio = Convert.ToDecimal(dr["RATIO"]);
+                    doBOM.Add(item);
 
-            //        SqlCommand sqlInsert = new SqlCommand();
-            //        sqlInsert.CommandText = $@"INSERT INTO [dbSCM].[dbo].[DO_DailyPlan_P91] ([WCNO],[PRDYMD],[MODEL],[Plan]) 
-            //                          VALUES ('{item.wcno}','{item.prdymd}','{item.model}','{item.Qty}')";
-            //        int insert = dbSCM.ExecuteNonCommand(sqlInsert);
-            //    }
-            //}
+                }
+            }
+
+
+
+            //********* (3) JOIN PLAN AND RES_PART_LIST [NEW] ***********
+            var PlanJoinBom = (from Plan in doPlanP91s
+                               join Bom in doBOM on Plan.model equals Bom.Model
+                               select new
+                               {
+                                   WCNO = Plan.wcno,
+                                   PRDYM = Plan.prdymd.Substring(0, 6),
+                                   PRDYMD = Plan.prdymd,
+                                   PdLeadTime = Bom.PdLeadTime,
+                                   MODEL = Plan.model,
+                                   QTY = Convert.ToDecimal(Plan.Qty),
+                                   PARTNO = Bom.Partno,
+                                   CM = Bom.Cm,
+                                   PARTNAME = Bom.Partname,
+                                   ROUTE = Bom.Route,
+                                   CATMAT = Bom.Catmat,
+                                   EXP = Bom.Exp,
+                                   REQQTY = Bom.Reqqty,
+                                   WHUNIT = Bom.Whunit,
+                                   VENDER = Bom.Vender,
+                                   RATIO = Bom.Ratio,
+                                   CONSUMPTION = Convert.ToDecimal((Bom.Reqqty * Plan.Qty) * (Bom.Ratio / 100))
+                               }).Where(x => x.QTY > 0);
+
+
+            //********* (4) FIND PRDLYTMD FROM (3) [NEW] ***********
+            List<ViDoPlan> doPLAN_RESULT_P91 = new List<ViDoPlan>();
+            foreach (var item in PlanJoinBom)
+            {
+                ViDoPlan _final = new ViDoPlan();
+
+                _final.Wcno = Convert.ToInt16(item.WCNO);
+                _final.Prdymd = item.PRDYM;
+                _final.Prdymd = item.PRDYMD;
+                _final.PdLeadTime = item.PdLeadTime;
+                //_final.Prdltymd = dr["PRDLTYMD"].ToString();
+                _final.Model = item.MODEL;
+                _final.Qty = item.QTY;
+                _final.Partno = item.PARTNO;
+                _final.Cm = item.CM;
+                _final.Partname = item.PARTNAME;
+                _final.Route = item.ROUTE;
+                _final.Catmat = item.CATMAT;
+                _final.Exp = item.EXP;
+                _final.Reqqty = item.REQQTY;
+                _final.Whunit = item.WHUNIT;
+                _final.Vender = item.VENDER;
+                _final.Ratio = item.RATIO;
+                _final.Consumption = Convert.ToDouble(item.CONSUMPTION);
+
+
+                doPLAN_RESULT_P91.Add(_final);
+
+
+            }
+
+
+            doPLAN_RESULT_P91 = doPLAN_RESULT_P91
+            .GroupBy(x => new { x.Prdymd, x.Partno, x.Cm, x.Vender })
+                .Select(_do => new ViDoPlan
+                {
+
+                    Prdymd = _do.Key.Prdymd,
+                    Partno = _do.Key.Partno,
+                    Cm = _do.Key.Cm,
+                    Vender = _do.Key.Vender,
+                    Qty = Convert.ToDecimal(Math.Round(_do.Sum(x => x.Consumption), 0))
+                }
+            ).OrderBy(x => x.Prdymd).ToList();
+
+            // set data to redis
+            string _key = "DO_PrdPlan_" + sDate.ToString("yyyyMMdd");
+            setRedis(_key, doPLAN_RESULT_P91);
+
 
             //**********************
 
-
-
-            //SqlCommand sql = new SqlCommand();
-            //sql.CommandText = @"SELECT PRDYMD,PARTNO,CM,VENDER,ROUND(SUM(CONSUMPTION),0)  AS CONSUMPTION
-            //                             FROM [dbSCM].[dbo].[vi_DO_Plan]
-            //                             WHERE PRDYMD >= @SDATE 
-            //                             AND PRDYMD <= @FDATE AND VENDER = @SUPPLIER  GROUP BY PRDYMD,PARTNO,CM,VENDER ORDER BY PRDYMD ASC";
-            //sql.Parameters.Add(new SqlParameter("@SDATE", sDate.ToString("yyyyMMdd")));
-            //sql.Parameters.Add(new SqlParameter("@FDATE", fDate.ToString("yyyyMMdd")));
-            //sql.Parameters.Add(new SqlParameter("@SUPPLIER", supplier));
-            //DataTable dt = dbSCM.Query(sql);
-            //if (dt.Rows.Count > 0)
-            //{
-            //    foreach (DataRow dr in dt.Rows)
-            //    {
-            //        ViDoPlan item = new ViDoPlan();
-            //        item.Qty = Convert.ToDecimal(dr["CONSUMPTION"].ToString());
-            //        item.Prdymd = dr["PRDYMD"].ToString();
-            //        item.Partno = dr["PARTNO"].ToString();
-            //        item.Cm = dr["CM"].ToString();
-            //        res.Add(item);
-            //    }
-            //}
-
-
-
-
-
-
-
-
-
-
-            //sql.CommandText = @"SELECT [DATE_VAL] PRDYMD
-            //               ,[PARTNO] PARTNO
-            //               ,VD_CODE VENDER
-            //               ,ROUND(SUM(PLAN_VAL),0) AS CONSUMPTION
-
-            //                  FROM [dbSCM].[dbo].[DO_HISTORY_DEV]
-            //                  WHERE  RUNNING_CODE  IN (SELECT TOP(1) RUNNING_CODE FROM [dbSCM].[dbo].[DO_HISTORY_DEV] ORDER BY RUNNING_CODE desc)
-            //                        and DATE_VAL >= @SDATE and DATE_VAL <= @FDATE
-            //                        and VD_CODE = @SUPPLIER
-            //                GROUP BY DATE_VAL,PARTNO,VD_CODE 
-            //                ORDER BY PRDYMD ASC";
-            //sql.Parameters.Add(new SqlParameter("@SDATE", sDate.ToString("yyyyMMdd")));
-            //sql.Parameters.Add(new SqlParameter("@FDATE", fDate.ToString("yyyyMMdd")));
-            //sql.Parameters.Add(new SqlParameter("@SUPPLIER", supplier));
-            //DataTable dt = dbSCM.Query(sql);
-            //if (dt.Rows.Count > 0)
-            //{
-            //    foreach (DataRow dr in dt.Rows)
-            //    {
-            //        ViDoPlan item = new ViDoPlan();
-            //        item.Qty = Convert.ToDecimal(dr["CONSUMPTION"].ToString());
-            //        item.Prdymd = dr["PRDYMD"].ToString();
-            //        item.Partno = dr["PARTNO"].ToString();
-            //        //item.Cm = dr["CM"].ToString();
-            //        res.Add(item);
-            //    }
-            //}
-            return res;
+            return doPLAN_RESULT_P91;
         }
 
 
@@ -463,7 +546,7 @@ namespace DeliveryOrderAPI
             List<DoPartMaster> res = new List<DoPartMaster>();
             //List<DoPartMaster> res = _DBSCM.DoPartMasters.Where(x => x.VdCode.Trim() == VenderCode.Trim() && x.Active == "ACTIVE").ToList();
             SqlCommand Sql = new SqlCommand();
-            Sql.CommandText = $@"  SELECT A.* FROM (SELECT  TRIM([PARTNO]) [PARTNO]  ,[CM] ,BOX_QTY,CASE WHEN BOX_MIN IS NULL THEN BOX_QTY ELSE BOX_MIN END BOX_MIN ,BOX_MAX, DIAMETER,VD_CODE,DESCRIPTION,PDLT,UNIT,BOX_PER_PALLET
+            Sql.CommandText = $@"  SELECT A.* FROM (SELECT  TRIM([PARTNO]) [PARTNO]  ,[CM] ,BOX_QTY,CASE WHEN BOX_MIN IS NULL THEN BOX_QTY ELSE BOX_MIN END BOX_MIN ,BOX_MAX, DIAMETER,VD_CODE,DESCRIPTION,PDLT,UNIT,BOX_PER_PALLET ,WH_NO
   ,ROW_NUMBER() OVER (PARTITION BY TRIM(PARTNO) ORDER BY CM DESC) rn
   FROM [dbSCM].[dbo].[DO_PART_MASTER]
   WHERE ACTIVE = 'ACTIVE' AND BOX_QTY IS NOT NULL AND VD_CODE = '{VenderCode}'
@@ -483,7 +566,8 @@ namespace DeliveryOrderAPI
                 int boxPerPallet = oHelper.ConvStr2Int(dr["BOX_PER_PALLET"].ToString()!);
                 int pdlt = oHelper.ConvStr2Int(dr["PDLT"].ToString()!);
                 string unit = dr["UNIT"].ToString()!;
-                res.Add(new DoPartMaster() { Active = "ACTIVE", PartId = 1, Partno = partno, Cm = cm, BoxQty = boxQty, BoxMin = boxMin, BoxMax = boxMax, Diameter = diameter, VdCode = vdCode, Description = desc, Pdlt = pdlt, BoxPerPallet = boxPerPallet, Unit = unit });
+                string wh_no = Convert.IsDBNull(dr["WH_NO"].ToString()) ? "" : dr["WH_NO"].ToString();
+                res.Add(new DoPartMaster() { Active = "ACTIVE", PartId = 1, Partno = partno, Cm = cm, BoxQty = boxQty, BoxMin = boxMin, BoxMax = boxMax, Diameter = diameter, VdCode = vdCode, Description = desc, Pdlt = pdlt, BoxPerPallet = boxPerPallet, Unit = unit, WH_NO = wh_no });
             }
             return res;
         }
@@ -491,6 +575,8 @@ namespace DeliveryOrderAPI
         {
             List<MRESULTDO> res = response;
             DateTime dtNow = DateTime.Now;
+            //DateTime dtNow = new DateTime(2025, 02, 05);
+
             double StockLoop = 0;
             MStockAlpha ItemStock = stockAlpha.FirstOrDefault(x => x.Part == part.Trim() && x.Cm == cm.Trim())!;
             if (ItemStock != null)
@@ -600,24 +686,38 @@ namespace DeliveryOrderAPI
         //    return index;
         //}
 
-        internal List<MRESULTDO> ADJ_DO(List<MRESULTDO> response, string vender, string part, DateTime dtLoop, double DO, Dictionary<string, bool> VdMaster,  DoVenderMaster vdMaster,double PORemain)
+        internal List<MRESULTDO> ADJ_DO(List<MRESULTDO> response, string vender, string part, DateTime dtLoop, double DO, Dictionary<string, bool> VdMaster, DoVenderMaster vdMaster, double PORemain, int? BoxQty, List<CalendarAlpha> holiday)
         {
             string YMDFormat = "yyyyMMdd";
             DateTime dtNow = DateTime.Now;
+            //DateTime dtNow = new DateTime(2025,02,05);
             DateTime dtEnd = dtNow.AddDays(14);
             DateTime dtEndFixed = dtNow.AddDays((vdMaster.VdProdLead != null ? (int)vdMaster.VdProdLead : 0) - 1);
-            DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22, 0, 0);
-            if (dtNow > dt3PM)
-            {
-                //over3PM = true;
-                dtEndFixed = dtEndFixed.AddDays(1);
-            }
+            //DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22, 0, 0);
+            //if (dtNow > dt3PM)
+            //{
+            //    //over3PM = true;
+            //    dtEndFixed = dtEndFixed.AddDays(1);
+            //}
             dtLoop = dtLoop.AddDays(-2); // หาวันที่สามารถลงยอด D/O ได้ใกล้และเร็วที่สุดจากวันที่ Stock ติดลบ - PrdLeadtime
-            if (dtLoop.Date < dtEndFixed.Date)
+            //if (dtLoop.Date < dtEndFixed.Date)
+            //{
+
+            //    dtLoop = dtEndFixed;
+            //}
+            if (dtLoop.Date <= dtEndFixed.Date)
             {
-                dtLoop = dtEndFixed;
+
+                dtLoop = dtEndFixed.AddDays(1);
             }
+            bool isHoliday = false;
+
             bool CanDelivery = VdMaster.ContainsKey(dtLoop.ToString("ddd").ToUpper()) ? VdMaster[dtLoop.ToString("ddd").ToUpper().ToUpper()] : false;
+            if (CanDelivery)
+            {
+                CanDelivery = holiday.Any(x => Convert.ToInt32(x.ymd) == Convert.ToInt32(dtLoop.ToString("yyyyMMdd"))) == true ? false : true;
+
+            }
             bool Increment = false; // สำหรับการ เพิ่ม หรือ ลด วันที่ เพื่อหาวันที่สามารถจัดส่งได้ false -1 
             while (CanDelivery == false)
             {
@@ -639,6 +739,12 @@ namespace DeliveryOrderAPI
                     }
                 }
                 CanDelivery = VdMaster.ContainsKey(dtLoop.ToString("ddd").ToUpper()) ? VdMaster[dtLoop.ToString("ddd").ToUpper().ToUpper()] : false;
+
+                if (CanDelivery)
+                {
+                    CanDelivery = holiday.Any(x => Convert.ToInt32(x.ymd) == Convert.ToInt32(dtLoop.ToString("yyyyMMdd"))) == true ? false : true;
+                }
+
             }
             if (CanDelivery == true)
             {
@@ -647,15 +753,26 @@ namespace DeliveryOrderAPI
                 {
                     response[index].Do += DO;
                     response[index].POFIFO = PORemain;
+                    response[index].Box = (int)Math.Ceiling(response[index].Do / Convert.ToDouble(BoxQty));
+
+                    // 154018 = okaya คิดเป็น KG (DO / boxPerpallet)
+                    int? boxPallet = _DBSCM.DoPartMasters.Where(x => x.VdCode == vender && x.Partno == part).FirstOrDefault().BoxPerPallet;
+                    if (vender == "154018")
+                        response[index].Pallet = (int)Math.Ceiling(((int)Math.Ceiling(response[index].Do) / Convert.ToDouble(boxPallet)));
+                    else
+                        //response[index].Pallet = (int)Math.Ceiling(Convert.ToDecimal(response[index].Box)/Convert.ToDecimal(boxPallet));
+                        response[index].Pallet = 0;
+                }
+                else
+                {
                 }
             }
             return response;
         }
 
-        public MODEL_GET_DO CalDO(bool run, string vdcode = "", MGetPlan param = null, string doRunningCode = "", int doRev = 0, bool? hiddenPartNoPlan = true , 
+        public async Task<MODEL_GET_DO> CalDO(bool run, string vdcode = "", MGetPlan param = null, string doRunningCode = "", int doRev = 0, bool? hiddenPartNoPlan = true,
                                  bool? statusWarining = false)
         {
-
             List<string> fixDateHiglight = new List<string>();
             DateTime dtNow = DateTime.Now;
             DateTime dtDistribute = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 08, 0, 0);
@@ -711,6 +828,11 @@ namespace DeliveryOrderAPI
             // ********** ADD NEW 08/01/25 get caledar from alpha 011 ************** //
             List<CalendarAlpha> rDictHoliday = GetHolidayAlpha().Where(x => Convert.ToInt32(x.ymd) >= Convert.ToInt32(ymd) && Convert.ToInt32(x.ymd) <= Convert.ToInt32(dtNow.AddDays(countFixed).ToString("yyyyMMdd"))).ToList();
 
+            List<string> dciHoliday = rDictHoliday.Where(x => DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Saturday &&
+                                      DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Sunday).Select(x => x.ymd).ToList();
+
+
+
             List<DoHistoryDev> Historys = new List<DoHistoryDev>();
             try
             {
@@ -749,6 +871,12 @@ namespace DeliveryOrderAPI
                 // *** AFTER FIX DATE ***
                 List<ViDoPlan> Plans = GetPlans(vender, dtNow, dtEnd);
 
+
+                // *** GET DATA FROM RADIS ***
+                //List<ViDoPlan> Plans = await getRedis($"{"DO_PrdPlan_" + dtNow.ToString("yyyyMMdd")}");
+
+
+
                 // *** BETWEEN FIX DATE ***
                 List<ViDoPlan> PlansHistoryDev = GetPlansHistoryDev(vender, dtNow, dtEnd);
 
@@ -764,31 +892,31 @@ namespace DeliveryOrderAPI
                 PARTMASTER.AddRange(Parts);
                 VENDERMASTER.Add(oVdStd);
                 string PartJoin = string.Join("','", Parts.GroupBy(x => x.Partno).Select(y => y.Key).ToList());
-                List<MStockAlpha> StockAlpha = GetStockPS8AM(vender);
+                //List<MStockAlpha> StockAlpha = GetStockPS8AM(vender);
                 List<MPickList> PickLists = GetPickListBySupplier(PartJoin, dtStart, dtEnd);
                 List<MDOAct> DOActs = GetDoActs(dtStart, dtEnd, PartJoin, vender);
                 List<MPO> POs = GetPoDIT(dtStart, dtEnd, PartJoin);
 
                 // ********** EDIT 15/11/24 Support holiday ************** //
 
-                DateTime dtEndFixed = dtNow.AddDays(((oVdStd.VdProdLead != null ? (int)oVdStd.VdProdLead : 0) - 1)+1);
+                DateTime dtEndFixed = dtNow.AddDays(((oVdStd.VdProdLead != null ? (int)oVdStd.VdProdLead : 0) - 1) + 1);
 
                 // ********** EDIT 15/11/24 Update ************** //
 
                 DateTime dtnewFixed = DateTime.Now;
                 int count = 0;
-              
-                    while (count <= (int)oVdStd.VdProdLead)
-                    {
+
+                while (count <= (int)oVdStd.VdProdLead)
+                {
 
 
                     //if (dtnewFixed.DayOfWeek == DayOfWeek.Saturday || dtnewFixed.DayOfWeek == DayOfWeek.Sunday)
                     //{
 
                     //}
-                
+
                     // ********** EDIT 08/01/25 Update ************** //
-                    if (rDictHoliday.Where(x=>x.ymd == dtnewFixed.ToString("yyyyMMdd")).ToList().Count > 0)
+                    if (rDictHoliday.Where(x => x.ymd == dtnewFixed.ToString("yyyyMMdd")).ToList().Count > 0)
                     {
 
                     }
@@ -802,7 +930,7 @@ namespace DeliveryOrderAPI
 
 
                     dtnewFixed = dtnewFixed.AddDays(1);
-                    }
+                }
 
                 dtEndFixed = dtnewFixed;
 
@@ -825,7 +953,8 @@ namespace DeliveryOrderAPI
                                         WHERE G.jibu = '64'   
                                           and itemno like '%' 
                                           and APBIT IN ('U','P')
-                                          and C.htcode = :htcode";
+                                          and C.htcode = :htcode
+                                            and to_date(delymd,'yyyyMMdd') >= sysdate-7";
                 strGetPo.Parameters.Add(new OracleParameter(":htcode", vender));
                 DataTable dt = dbAlpha.Query(strGetPo);
                 foreach (DataRow dr in dt.Rows)
@@ -843,11 +972,16 @@ namespace DeliveryOrderAPI
                     rPOFIFO.Add(iPOFIFO);
                 }
 
-                //Parts = Parts.Where(x => x.Partno == "3P482067-1").ToList();
+                //Parts = Parts.Where(x => x.Partno == "3PD06362-1").ToList();
                 foreach (DoPartMaster itemPart in Parts)
                 {
+
+                    // ************** แก้ดึง STOCK ส่งแค่ PARTNO ไปเช็ค 21/01/2025 *******************
+                    List<MStockAlpha> StockAlpha = GetStockPS8AM(itemPart.Partno, itemPart.Cm);
+
                     string Part = itemPart.Partno.Trim();
                     string Cm = itemPart.Cm;
+                    int? BoxQty = itemPart.BoxQty;
                     //MAlpart oAlPart = rAlPart.FirstOrDefault(x => x.DrawingNo == Part);
                     //if (oAlPart != null)
                     //{
@@ -863,7 +997,7 @@ namespace DeliveryOrderAPI
                     double safetyStock = 0;
                     try
                     {
-                        decimal? oPlanOfPart = Plans.Where(x => x.Partno != null && x.Partno.Trim() == Part.Trim() && DateTime.ParseExact(x.Prdymd,"yyyyMMdd", CultureInfo.InvariantCulture).Date >= dtLoop.Date).Sum(x => x.Qty);
+                        decimal? oPlanOfPart = Plans.Where(x => x.Partno != null && x.Partno.Trim() == Part.Trim() && DateTime.ParseExact(x.Prdymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date >= dtLoop.Date).Sum(x => x.Qty);
                         if (oPlanOfPart == 0)
                         {
                             safetyStock = 0;
@@ -877,6 +1011,7 @@ namespace DeliveryOrderAPI
                     {
                         MRESULTDO itemDO = new MRESULTDO();
                         itemDO.PartNo = Part;
+                        itemDO.Cm = Cm;
                         itemDO.Vender = vender;
                         itemDO.vdCode = vender;
                         itemDO.vdName = objVender != null ? objVender.VdDesc : vender;
@@ -913,7 +1048,7 @@ namespace DeliveryOrderAPI
                                 itemDO.Stock = Stock;
                             }
                         }
-                       DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part && x.Revision == 999)!;
+                        DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part && x.Revision == 999)!;
                         //if ((dtNow > dtDistribute && dtLoop.Date <= dtEndFixed.Date) || (dtNow <= dtDistribute && dtLoop.Date <= dtEndFixed.Date) && oHis != null)
                         if (dtLoop.Date <= dtEndFixed.Date && oHis != null) // อดีด -> [E] Fixed
                         {
@@ -926,6 +1061,7 @@ namespace DeliveryOrderAPI
                             itemDO.PlanPrev = itemDO.Plan;
                             //itemDO.Do = nPoFiFo < (double)oHis.DoVal! ? nPoFiFo : (double)oHis.DoVal!;
                             itemDO.Do = (double)oHis.DoVal!;
+                            itemDO.Do = itemDO.Do < 0 ? 0 : itemDO.Do;
                             itemDO.Stock = itemDO.Stock;
                             // หากวันที่เป็นวันปัจจุบันขึ้นไป จะนำ STOCK - PLAN
                             if (dtLoop.Date >= dtNow.Date)
@@ -975,15 +1111,29 @@ namespace DeliveryOrderAPI
                             //================ SET PO ==================//
                             //if (dtLoop.Date == dtNow.Date)
                             //{
-                                nPoFiFo = nPoFiFo - itemDO.Do;
-                                itemDO.POFIFO = nPoFiFo;
+                            nPoFiFo = nPoFiFo - itemDO.Do;
+                            itemDO.POFIFO = nPoFiFo;
                             //}
+
+                            int? boxPerpallet = itemPart.BoxPerPallet;
+                            //คำนวณ Box
+                            itemDO.Box = (int)Math.Ceiling(itemDO.Do > 0 ? itemDO.Do / Convert.ToDouble(itemPart.BoxQty) : 0);
+                            // คำนวณ Pallet
+                            // 154018 = okaya คิดเป็น KG (DO / boxPerpallet)
+                            if (vdcode == "154018")
+                                itemDO.Pallet = (int)Math.Ceiling((itemDO.Do > 0 ? itemDO.Do : 0) / Convert.ToDouble(boxPerpallet));
+                            else
+                                //itemDO.Pallet = (int)Math.Ceiling(Convert.ToDecimal(itemDO.Box) / Convert.ToDecimal(boxPerpallet));
+                                itemDO.Pallet = 0;
+
+
                             DOITEM.Add(itemDO);
                         }
+                        // ช่วง forecast Date
                         else
                         {
                             itemDO.Plan = 0;
-                 
+
                             itemDO.PlanPrev = 0;
                             itemDO.PickList = 0;
                             ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno != null && x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
@@ -1001,7 +1151,10 @@ namespace DeliveryOrderAPI
                                 itemDO.Stock = Stock;
                                 double RequestStock = Math.Abs(Stock) < safetyStock ? (safetyStock - Math.Abs(Stock)) : Math.Abs(Stock);
                                 double DO = Convert.ToDouble(chkSV.Qty);
-                                DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+                                //double DO = GetDoVal(RequestStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock)
+
+                                DO = DO < 0 ? 0 : DO;
+                                DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
                                 ModelRefreshStock rData = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
                                 DOITEM = rData.data;
                                 Stock = rData.Stock;
@@ -1011,20 +1164,42 @@ namespace DeliveryOrderAPI
                                 double StockCurrent = Stock;
                                 Stock -= itemDO.Plan;
                                 itemDO.Stock = Stock;
-                                if (Stock <= 0 || Stock < safetyStock)
+                                //safetyStock = oVdStd.VdSafetyStock;
+
+                                itemDO.PartNo = Part;
+                                itemDO.Cm = Cm;
+                                itemDO.Vender = vender;
+                                itemDO.vdCode = vender;
+                                int countPlan = Plans.Where(x => x.Vender == itemDO.vdCode && x.Partno == itemDO.PartNo && x.Cm == itemDO.Cm &&
+                                                            (DateTime.ParseExact(x.Prdymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date >= DateTime.Now) && x.Qty > 0).Count();
+
+
+
+                                //&& countPlan > 0
+
+
+                                if ((Stock <= 0 || Stock < safetyStock))
                                 {
                                     double RequireStock = Math.Abs(Stock) < safetyStock ? (safetyStock - Math.Abs(Stock)) : Math.Abs(Stock);
                                     double DO = GetDoVal(RequireStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock)
+
+
+
                                     if (nPoFiFo == 0 || nPoFiFo < DO)
-                                    { 
+                                    {
                                         // DO <= REMAIN PO FIFO
+
+                                        //nPoFiFo = nPoFiFo <= 0 ? 0 : nPoFiFo;
                                         DO = nPoFiFo;
+                                        //double test = rPOFIFO.Where(x => x.partno == Part).Sum(x => x.whblbqty);
+                                        //DO = (nPoFiFo <= 0 && DO <= test) ? DO : (DO > test ? test : nPoFiFo);
                                     }
                                     else
                                     {
                                         nPoFiFo -= DO;
                                     }
-                                    DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+                                    DO = DO < 0 ? 0 : DO;
+                                    DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
                                 }
                                 ModelRefreshStock rData = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
                                 DOITEM = rData.data;
@@ -1038,6 +1213,23 @@ namespace DeliveryOrderAPI
                     DOITEM = RefreshPOFIFO(DOITEM, defPOFIFO, dtNow, Part);
                 }
             }
+
+            List<MRESULTDO> _doResult = new List<MRESULTDO>();
+            // คำนวณ total box , pallet
+            if (vdcode == "154018" || vdcode == "203101" || vdcode == "203018")
+            {
+                List<MRESULTDO> _docal = calDoPallet(DOITEM, vdcode);
+
+                DOITEM.AddRange(_docal);
+                //_doResult = _docal.Concat(DOITEM).ToList();
+            }
+            //else
+            //{
+            //    _doResult = DOITEM;
+            //}
+
+            rPOFIFO = rPOFIFO.OrderBy(x => x.delymd).ToList();
+            fixDateHiglight = fixDateHiglight.Distinct().ToList();
             return new MODEL_GET_DO()
             {
                 fixDateYMD = fixDateHiglight.Distinct().ToList(),
@@ -1046,10 +1238,487 @@ namespace DeliveryOrderAPI
                 VenderMaster = VENDERMASTER,
                 nbr = nbr,
                 VenderDelivery = VenderDeliveryMaster,
+                DciHoliday = dciHoliday,
                 VenderSelected = oVenderSelect,
-                ListPO = rPOFIFO.OrderBy(x => x.delymd).ToList()
+                ListPO = rPOFIFO.OrderBy(x => x.delymd).ToList(),
             };
         }
+
+
+        //public async Task<MODEL_GET_DO> CalDO(bool run, string vdcode = "", MGetPlan param = null, string doRunningCode = "", int doRev = 0, bool? hiddenPartNoPlan = true,
+        //                    bool? statusWarining = false)
+        //{
+        //    List<string> fixDateHiglight = new List<string>();
+        //    DateTime dtNow = new DateTime(2025, 02, 05);
+        //    DateTime dtDistribute = new DateTime(2025, 02, 05, 08, 0, 0);
+        //    string ymd = new DateTime(2025, 02, 05).ToString("yyyyMMdd");
+        //    List<MPOAlpha01> rPOFIFO = new List<MPOAlpha01>();
+        //    vdcode = vdcode != null ? vdcode : "";
+        //    string buyer = param != null ? param.buyer : "";
+        //    List<DoVenderMaster> oVenderSelect = new List<DoVenderMaster>();
+        //    if (vdcode == "" && !run)
+        //    {
+        //        List<DoDictMstr> listVender = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == buyer).ToList();
+        //        if (listVender.Count > 0)
+        //        {
+        //            oVenderSelect = _DBSCM.DoVenderMasters.Where(x => x.VdCode == listVender[0].RefCode).ToList();
+        //            if (oVenderSelect.Count > 0)
+        //            {
+        //                vdcode = oVenderSelect[0].VdCode;
+        //            }
+        //        }
+        //    }
+        //    else
+        //    {
+        //        oVenderSelect = _DBSCM.DoVenderMasters.Where(x => x.VdCode == vdcode).ToList();
+        //    }
+        //    List<MAlpart> rAlPart = new List<MAlpart>();
+        //    SqlCommand sqlAlPart = new SqlCommand();
+        //    sqlAlPart.CommandText = @"SELECT DrawingNo,CM  FROM [dbSCM].[dbo].[AL_Part]  where Route = 'D'";
+        //    DataTable dtAlPart = dbSCM.Query(sqlAlPart);
+        //    foreach (DataRow dr in dtAlPart.Rows)
+        //    {
+        //        MAlpart itemAlPart = new MAlpart();
+        //        itemAlPart.DrawingNo = dr["DrawingNo"].ToString();
+        //        itemAlPart.Cm = dr["CM"].ToString();
+        //        rAlPart.Add(itemAlPart);
+        //    }
+        //    string YMDFormat = "yyyyMMdd";
+        //    string nbr = "";
+        //    List<MRESULTDO> DOITEM = new List<MRESULTDO>();
+        //    List<DoPartMaster> PARTMASTER = new List<DoPartMaster>();
+        //    List<DoVenderMaster> VENDERMASTER = new List<DoVenderMaster>();
+        //    Dictionary<string, Dictionary<string, bool>> VenderDeliveryMaster = new Dictionary<string, Dictionary<string, bool>>();
+        //    int dFixed = 2;
+        //    int dRun = 7;
+        //    DateTime dtStart = statusWarining == true ? new DateTime(2025, 02, 05) : dtNow.AddDays(-7);
+        //    DateTime dtRun = dtNow.AddDays(dFixed);
+        //    DateTime dtEnd = dtNow.AddDays(dFixed + dRun);
+        //    /* A003 */
+        //    int countFixed = 13;
+        //    //List<DoDictMstr> rDictHoliday = _DBSCM.DoDictMstrs.Where(x => x.DictType == "holiday" && Convert.ToInt32(x.Code) >= Convert.ToInt32(ymd) && Convert.ToInt32(x.Code) <= Convert.ToInt32(dtNow.AddDays(countFixed).ToString("yyyyMMdd"))).ToList();
+
+
+
+        //    // ********** ADD NEW 08/01/25 get caledar from alpha 011 ************** //
+        //    List<CalendarAlpha> rDictHoliday = GetHolidayAlpha().Where(x => Convert.ToInt32(x.ymd) >= Convert.ToInt32(ymd) && Convert.ToInt32(x.ymd) <= Convert.ToInt32(dtNow.AddDays(countFixed).ToString("yyyyMMdd"))).ToList();
+
+        //    List<string> dciHoliday = rDictHoliday.Where(x => DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Saturday &&
+        //                              DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Sunday).Select(x => x.ymd).ToList();
+
+
+
+        //    List<DoHistoryDev> Historys = new List<DoHistoryDev>();
+        //    try
+        //    {
+        //        //Historys = _DBSCM.DoHistoryDevs.Where(x => x.Revision == 999).OrderBy(x => x.Partno).ToList();
+        //        Historys = _DBSCM.DoHistoryDevs.Where(x => x.Revision == 1 && x.Partno == "3PD06362-1").OrderBy(x => x.Partno).ToList();
+
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        Console.WriteLine(e.Message);
+        //    }
+        //    if (Historys.Count > 0)
+        //    {
+        //        int rev = (int)Historys.FirstOrDefault()!.Rev!;
+        //        nbr = $"{Historys.FirstOrDefault()!.RunningCode}{rev.ToString("D3")}";
+        //    }
+        //    List<DoVenderMaster> ListVenderMaster = _DBSCM.DoVenderMasters.ToList();
+        //    List<DoDictMstr> ListVenderOfBuyer = _DBSCM.DoDictMstrs.Where(x => x.DictType == "BUYER" && x.Code == "41256" && x.DictStatus == "999").ToList();
+
+        //    if (vdcode != "")
+        //    {
+        //        ListVenderOfBuyer = ListVenderOfBuyer.Where(x => x.RefCode == vdcode).ToList();
+        //    }
+        //    List<DoVenderMaster> VdStds = _DBSCM.DoVenderMasters.ToList();
+        //    foreach (DoDictMstr itemVender in ListVenderOfBuyer)
+        //    {
+        //        string vender = itemVender.RefCode!;
+        //        DoVenderMaster oVdStd = VdStds.FirstOrDefault(x => x.VdCode == vender)!;
+        //        if (oVdStd != null)
+        //        {
+        //            int VdProdLead = Convert.ToInt32(oVdStd.VdProdLead) - 1;
+        //            dtRun = dtNow.AddDays(VdProdLead);
+        //            dtEnd = statusWarining == true ? dtNow.AddDays(VdProdLead) : dtNow.AddDays(VdProdLead + dRun);
+        //        }
+        //        Dictionary<string, bool> VenderDelivery = getDaysDelivery(oVdStd);
+        //        if (!VenderDeliveryMaster.ContainsKey(vender)) { VenderDeliveryMaster.Add(vender, VenderDelivery); }
+
+        //        // *** AFTER FIX DATE ***
+        //        List<ViDoPlan> Plans = GetPlans(vender, dtNow, dtEnd);
+
+
+        //        // *** GET DATA FROM RADIS ***
+        //        //List<ViDoPlan> Plans = await getRedis($"{"DO_PrdPlan_" + dtNow.ToString("yyyyMMdd")}");
+
+
+
+        //        // *** BETWEEN FIX DATE ***
+        //        List<ViDoPlan> PlansHistoryDev = GetPlansHistoryDev(vender, dtNow, dtEnd);
+
+        //        List<DoPartMaster> Parts = GetPartByVenderCode(vender);
+
+
+        //        //**** Addition Part S/V ****
+        //        List<ViDoPlan> PlansSV = GetSVPlans(vender, dtNow, dtEnd);
+        //        if (vender == "194013")
+        //        {
+        //            Plans.AddRange(PlansSV);
+        //        }
+        //        PARTMASTER.AddRange(Parts);
+        //        VENDERMASTER.Add(oVdStd);
+        //        string PartJoin = string.Join("','", Parts.GroupBy(x => x.Partno).Select(y => y.Key).ToList());
+        //        //List<MStockAlpha> StockAlpha = GetStockPS8AM(vender);
+        //        List<MPickList> PickLists = GetPickListBySupplier(PartJoin, dtStart, dtEnd);
+        //        List<MDOAct> DOActs = GetDoActs(dtStart, dtEnd, PartJoin, vender);
+        //        List<MPO> POs = GetPoDIT(dtStart, dtEnd, PartJoin);
+
+        //        // ********** EDIT 15/11/24 Support holiday ************** //
+
+        //        DateTime dtEndFixed = dtNow.AddDays(((oVdStd.VdProdLead != null ? (int)oVdStd.VdProdLead : 0) - 1) + 1);
+
+        //        // ********** EDIT 15/11/24 Update ************** //
+
+        //        DateTime dtnewFixed = new DateTime(2025, 02, 05);
+        //        int count = 0;
+
+        //        while (count <= (int)oVdStd.VdProdLead)
+        //        {
+
+
+        //            //if (dtnewFixed.DayOfWeek == DayOfWeek.Saturday || dtnewFixed.DayOfWeek == DayOfWeek.Sunday)
+        //            //{
+
+        //            //}
+
+        //            // ********** EDIT 08/01/25 Update ************** //
+        //            if (rDictHoliday.Where(x => x.ymd == dtnewFixed.ToString("yyyyMMdd")).ToList().Count > 0)
+        //            {
+
+        //            }
+        //            else
+        //            {
+        //                fixDateHiglight.Add(dtnewFixed.ToString("yyyy-MM-dd"));
+        //                count++;
+        //                if (count == (int)oVdStd.VdProdLead) break;
+
+        //            }
+
+
+        //            dtnewFixed = dtnewFixed.AddDays(1);
+        //        }
+
+        //        dtEndFixed = dtnewFixed;
+
+
+
+
+        //        // ************************************ //
+
+        //        OracleCommand strGetPo = new OracleCommand();
+        //        strGetPo.CommandText = @"SELECT C.HTCODE, G.PONO, G.ITEMNO, 
+        //                                   G.PARTNO, G.BRUSN, 
+        //                                   G.DELYMD,  
+        //                                   C.ODRYMD, G.CALYMD,G.RCSYMD, 
+        //                                   G.RCCYMD, 
+        //                                   G.WHUM, G.WHQTY,  G.WHBLQTY, G.WHBLBQTY, 
+        //                                   G.IVUM, G.IVQTY,  G.IVBLQTY, G.IVBLBQTY,    
+        //                                   G.APBIT 
+        //                                FROM MASTER.GST_DATOSD G
+        //                                LEFT JOIN MASTER.GST_DATOSC C ON C.PONO = G.PONO 
+        //                                WHERE G.jibu = '64'   
+        //                                  and itemno like '%' 
+        //                                  and APBIT IN ('U','P')
+        //                                  and C.htcode = :htcode";
+        //        strGetPo.Parameters.Add(new OracleParameter(":htcode", vender));
+        //        DataTable dt = dbAlpha.Query(strGetPo);
+        //        foreach (DataRow dr in dt.Rows)
+        //        {
+        //            MPOAlpha01 iPOFIFO = new MPOAlpha01();
+        //            iPOFIFO.pono = dr["PONO"].ToString();
+        //            iPOFIFO.itemno = dr["ITEMNO"].ToString();
+        //            iPOFIFO.htcode = dr["HTCODE"].ToString();
+        //            iPOFIFO.whqty = dr["WHQTY"].ToString();
+        //            iPOFIFO.whblbqty = oHelper.ConvStrToDB(dr["WHBLBQTY"].ToString()!);
+        //            iPOFIFO.whblqty = oHelper.ConvStrToDB(dr["WHBLQTY"].ToString()!);
+        //            iPOFIFO.partno = dr["PARTNO"].ToString().Trim();
+        //            iPOFIFO.brusn = dr["BRUSN"].ToString();
+        //            iPOFIFO.delymd = dr["DELYMD"].ToString();
+        //            rPOFIFO.Add(iPOFIFO);
+        //        }
+
+        //        Parts = Parts.Where(x => x.Partno == "3PD06362-1").ToList();
+        //        foreach (DoPartMaster itemPart in Parts)
+        //        {
+
+        //            // ************** แก้ดึง STOCK ส่งแค่ PARTNO ไปเช็ค 21/01/2025 *******************
+        //            List<MStockAlpha> StockAlpha = GetStockPS8AM(itemPart.Partno, itemPart.Cm);
+        //            string Part = itemPart.Partno.Trim();
+        //            string Cm = itemPart.Cm;
+        //            int? BoxQty = itemPart.BoxQty;
+        //            //MAlpart oAlPart = rAlPart.FirstOrDefault(x => x.DrawingNo == Part);
+        //            //if (oAlPart != null)
+        //            //{
+        //            //    Cm = oAlPart.Cm;
+        //            //}
+
+        //            int Pdlt = oHelper.ConvIntEmptyToInt(itemPart.Pdlt);
+        //            double Stock = 0;
+        //            DateTime dtLoop = dtStart;
+        //            double nPoFiFo = rPOFIFO.Where(x => x.partno == Part).Sum(x => x.whblbqty);
+        //            double defPOFIFO = nPoFiFo;
+        //            DoVenderMaster objVender = ListVenderMaster.FirstOrDefault(x => x.VdCode == vender)!;
+        //            double safetyStock = 0;
+        //            try
+        //            {
+        //                decimal? oPlanOfPart = Plans.Where(x => x.Partno != null && x.Partno.Trim() == Part.Trim() && DateTime.ParseExact(x.Prdymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date >= dtLoop.Date).Sum(x => x.Qty);
+        //                if (oPlanOfPart == 0)
+        //                {
+        //                    safetyStock = 0;
+        //                }
+        //            }
+        //            catch
+        //            {
+        //                safetyStock = oHelper.ConvInt2Db(oVdStd.VdSafetyStock);
+        //            }
+        //            while (dtLoop <= dtEnd)
+        //            {
+        //                MRESULTDO itemDO = new MRESULTDO();
+        //                itemDO.PartNo = Part;
+        //                itemDO.Cm = Cm;
+        //                itemDO.Vender = vender;
+        //                itemDO.vdCode = vender;
+        //                itemDO.vdName = objVender != null ? objVender.VdDesc : vender;
+        //                itemDO.Date = dtLoop;
+        //                if (dtLoop > dtEndFixed)
+        //                {
+        //                    //DoDictMstr isHoliday = rDictHoliday.FirstOrDefault(x => x.Code == dtLoop.ToString("yyyyMMdd"));
+
+        //                    // ********** ADD NEW 08/01/25 get caledar from alpha 011 ************** /
+        //                    CalendarAlpha isHoliday = rDictHoliday.FirstOrDefault(x => x.ymd == dtLoop.ToString("yyyyMMdd"));
+
+        //                    if (isHoliday != null) // Date [N] = Holiday
+        //                    {
+        //                        itemDO.holiday = true;
+        //                    }
+        //                }
+        //                MPickList itemPickList = PickLists.FirstOrDefault(x => x.Partno == Part && x.Idate == dtLoop.Date.ToString(YMDFormat))!;
+        //                if (itemPickList != null)
+        //                {
+        //                    itemDO.PickList = double.Parse(itemPickList.Fqty);
+        //                }
+        //                MDOAct itemDoAct = DOActs.FirstOrDefault(x => x.PartNo == Part && x.AcDate == dtLoop.Date.ToString(YMDFormat) && x.Vender == vender)!;
+        //                if (itemDoAct != null)
+        //                {
+        //                    itemDO.DoAct = itemDoAct.Wqty;
+        //                }
+
+        //                if (dtLoop.Date == dtNow.Date)
+        //                {
+        //                    List<MStockAlpha> rStock = StockAlpha.Where(x => x.Part.Trim() == Part.Trim()).ToList();
+        //                    if (rStock.Count > 0)
+        //                    {
+        //                        Stock = rStock.Sum(x => x.Stock);
+        //                        itemDO.Stock = Stock;
+        //                    }
+        //                }
+        //                DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part && x.Revision == 1);
+        //                //if ((dtNow > dtDistribute && dtLoop.Date <= dtEndFixed.Date) || (dtNow <= dtDistribute && dtLoop.Date <= dtEndFixed.Date) && oHis != null)
+        //                if (dtLoop.Date.ToString("yyyyMMdd") != "20250207" && (dtLoop.Date <= dtEndFixed.Date && oHis != null) ) // อดีด -> [E] Fixed
+        //                {
+        //                    // 13 > 8 && 13 <= 18 || 13 <= 8 && 13 <= 18
+        //                    //DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part)!;
+        //                    //if (oHis != null)
+        //                    //{
+
+        //                    itemDO.Plan = (double)oHis.PlanVal!;
+        //                    itemDO.PlanPrev = itemDO.Plan;
+        //                    //itemDO.Do = nPoFiFo < (double)oHis.DoVal! ? nPoFiFo : (double)oHis.DoVal!;
+        //                    itemDO.Do = (double)oHis.DoVal!;
+        //                    itemDO.Do = itemDO.Do < 0 ? 0 : itemDO.Do;
+        //                    itemDO.Stock = itemDO.Stock;
+        //                    // หากวันที่เป็นวันปัจจุบันขึ้นไป จะนำ STOCK - PLAN
+        //                    if (dtLoop.Date >= dtNow.Date)
+        //                    {
+        //                        decimal? planP91_QTY = 0;
+        //                        decimal? planHistoryDev = 0;
+
+        //                        // ================================================================================ //
+        //                        // [S] ========= เช็คว่าประวัติแผนการผลิต ตรงหรือไม่ตรง กับแผนผลิต (ปัจจุบัน) [16/07/24 19:40] ===== //
+        //                        // ================================================================================ //
+
+        //                        //ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
+
+        //                        ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
+        //                        ViDoPlan itemPlanHistoryDev = PlansHistoryDev.FirstOrDefault(x => x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
+        //                        if (itemPlan == null || itemPlan.Qty != oHelper.ConvDBToDec(itemDO.Plan))
+        //                        {
+        //                            itemDO.Plan = oHelper.ConvDecToDB(itemPlan?.Qty);
+        //                            itemDO.PlanPrev = itemDO.Plan;
+
+        //                        }
+
+
+        //                        planP91_QTY = itemPlan == null ? 0 : itemPlan.Qty;
+        //                        planHistoryDev = itemPlanHistoryDev == null ? 0 : itemPlanHistoryDev.Qty;
+
+        //                        if (planP91_QTY != planHistoryDev)
+        //                        {
+        //                            itemDO.changePlan = true;
+        //                            itemDO.HistoryDevPlanQTY = planHistoryDev;
+        //                        }
+        //                        // ================================================================================ //
+        //                        // [E] ========= เช็คว่าประวัติแผนการผลิต ตรงหรือไม่ตรง กับแผนผลิต (ปัจจุบัน) [16/07/24 19:40] ===== //
+        //                        // ================================================================================ //
+        //                        Stock -= itemDO.Plan;
+        //                        Stock += itemDO.Do;
+        //                        itemDO.Stock = Stock;
+        //                    }
+        //                    //}
+
+        //                    //================ SET PO ==================//
+        //                    MPO itemPO = POs.FirstOrDefault(x => x.partNo.Trim() == Part && x.date == dtLoop.Date.ToString(YMDFormat) && x.vdCode == vender)!;
+        //                    if (itemPO != null)
+        //                    {
+        //                        itemDO.PO = itemPO.qty;
+        //                    }
+        //                    //================ SET PO ==================//
+        //                    //if (dtLoop.Date == dtNow.Date)
+        //                    //{
+        //                    nPoFiFo = nPoFiFo - itemDO.Do;
+        //                    itemDO.POFIFO = nPoFiFo;
+        //                    //}
+
+        //                    int? boxPerpallet = itemPart.BoxPerPallet;
+        //                    //คำนวณ Box
+        //                    itemDO.Box = (int)Math.Ceiling(itemDO.Do > 0 ? itemDO.Do / Convert.ToDouble(itemPart.BoxQty) : 0);
+        //                    // คำนวณ Pallet
+        //                    // 154018 = okaya คิดเป็น KG (DO / boxPerpallet)
+        //                    if (vdcode == "154018")
+        //                        itemDO.Pallet = (int)Math.Ceiling((itemDO.Do > 0 ? itemDO.Do : 0) / Convert.ToDouble(boxPerpallet));
+        //                    else
+        //                        //itemDO.Pallet = (int)Math.Ceiling(Convert.ToDecimal(itemDO.Box) / Convert.ToDecimal(boxPerpallet));
+        //                        itemDO.Pallet = 0;
+
+
+        //                    DOITEM.Add(itemDO);
+        //                }
+        //                // ช่วง forecast Date
+        //                else
+        //                {
+        //                    itemDO.Plan = 0;
+
+        //                    itemDO.PlanPrev = 0;
+        //                    itemDO.PickList = 0;
+        //                    ViDoPlan itemPlan = Plans.FirstOrDefault(x => x.Partno != null && x.Partno.Trim() == Part.Trim() && x.Prdymd == dtLoop.ToString(YMDFormat))!;
+
+        //                    if (itemPlan != null)
+        //                    {
+        //                        itemDO.Plan = (double)itemPlan.Qty!;
+        //                        itemDO.PlanPrev = itemDO.Plan;
+        //                    }
+        //                    ViDoPlan chkSV = PlansSV.FirstOrDefault(x => x.Partno.Trim() == Part.Trim());
+        //                    if (chkSV != null)
+        //                    {
+        //                        double StockCurrent = Stock;
+        //                        Stock -= itemDO.Plan;
+        //                        itemDO.Stock = Stock;
+        //                        double RequestStock = Math.Abs(Stock) < safetyStock ? (safetyStock - Math.Abs(Stock)) : Math.Abs(Stock);
+        //                        //double DO = GetDoVal(RequestStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock)
+        //                        double DO = Convert.ToDouble(chkSV.Qty);
+        //                        DO = DO < 0 ? 0 : DO;
+        //                        DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+        //                        ModelRefreshStock rData = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
+        //                        DOITEM = rData.data;
+        //                        Stock = rData.Stock;
+        //                    }
+        //                    else
+        //                    {
+        //                        double StockCurrent = Stock;
+        //                        Stock -= itemDO.Plan;
+        //                        itemDO.Stock = Stock;
+        //                        //safetyStock = oVdStd.VdSafetyStock;
+
+        //                        itemDO.PartNo = Part;
+        //                        itemDO.Cm = Cm;
+        //                        itemDO.Vender = vender;
+        //                        itemDO.vdCode = vender;
+        //                        int countPlan = Plans.Where(x => x.Vender == itemDO.vdCode && x.Partno == itemDO.PartNo && x.Cm == itemDO.Cm &&
+        //                                                    (DateTime.ParseExact(x.Prdymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date >= DateTime.Now) && x.Qty > 0).Count();
+
+
+
+        //                        //&& countPlan > 0
+
+
+        //                        if ((Stock <= 0 || Stock < safetyStock))
+        //                        {
+        //                            double RequireStock = Math.Abs(Stock) < safetyStock ? (safetyStock - Math.Abs(Stock)) : Math.Abs(Stock);
+        //                            double DO = GetDoVal(RequireStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock)
+
+
+
+        //                            if (nPoFiFo == 0 || nPoFiFo < DO)
+        //                            {
+        //                                // DO <= REMAIN PO FIFO
+
+        //                                //nPoFiFo = nPoFiFo <= 0 ? 0 : nPoFiFo;
+        //                                DO = nPoFiFo;
+        //                                //double test = rPOFIFO.Where(x => x.partno == Part).Sum(x => x.whblbqty);
+        //                                //DO = (nPoFiFo <= 0 && DO <= test) ? DO : (DO > test ? test : nPoFiFo);
+        //                            }
+        //                            else
+        //                            {
+        //                                nPoFiFo -= DO;
+        //                            }
+        //                            DO = DO < 0 ? 0 : DO;
+        //                            DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+        //                        }
+        //                        ModelRefreshStock rData = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
+        //                        DOITEM = rData.data;
+        //                        Stock = rData.Stock;
+        //                    }
+        //                    DOITEM.Add(itemDO);
+        //                }
+        //                dtLoop = dtLoop.AddDays(1);
+        //            }
+        //            DOITEM = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha).data;
+        //            DOITEM = RefreshPOFIFO(DOITEM, defPOFIFO, dtNow, Part);
+        //        }
+        //    }
+
+        //    List<MRESULTDO> _doResult = new List<MRESULTDO>();
+        //    // คำนวณ total box , pallet
+        //    if (vdcode == "154018" || vdcode == "203101" || vdcode == "203018")
+        //    {
+        //        List<MRESULTDO> _docal = calDoPallet(DOITEM, vdcode);
+
+        //        DOITEM.AddRange(_docal);
+        //        //_doResult = _docal.Concat(DOITEM).ToList();
+        //    }
+        //    //else
+        //    //{
+        //    //    _doResult = DOITEM;
+        //    //}
+
+
+
+        //    return new MODEL_GET_DO()
+        //    {
+        //        fixDateYMD = fixDateHiglight.Distinct().ToList(),
+        //        data = DOITEM,
+        //        PartMaster = PARTMASTER,
+        //        VenderMaster = VENDERMASTER,
+        //        nbr = nbr,
+        //        VenderDelivery = VenderDeliveryMaster,
+        //        DciHoliday = dciHoliday,
+        //        VenderSelected = oVenderSelect,
+        //        ListPO = rPOFIFO.OrderBy(x => x.delymd).ToList(),
+        //    };
+        //}
+
+
         private List<MRESULTDO> RefreshPOFIFO(List<MRESULTDO> dOITEM, double defPOFIFO, DateTime dtNow, string part)
         {
             //double POFIFO = dOITEM.Where(x => x.Date.Date == dtNow.Date && x.PartNo == part).Sum(x => x.POFIFO);
@@ -1177,9 +1846,9 @@ namespace DeliveryOrderAPI
             List<CalendarAlpha> calendarAlphas = new List<CalendarAlpha>();
 
             OracleCommand strGetPo = new OracleCommand();
-            strGetPo.CommandText = @"select * FROM ND_CAL_TBL_V1
-                                     where NENDO = :YEAR and FUKAKU = 0
-                                     order by TUKI,NDAY";
+            strGetPo.CommandText = @"select YYDAY FROM ND_CAL_TBL_V1
+                                     where NENDO = :YEAR and FUKAKU = 0 
+                                     order by YYDAY";
             strGetPo.Parameters.Add(new OracleParameter(":YEAR", DateTime.Now.ToString("yyyy")));
             DataTable dt = dbAlpha.Query(strGetPo);
             string[] isHoliday = new string[dt.Rows.Count];
@@ -1187,16 +1856,186 @@ namespace DeliveryOrderAPI
             {
 
                 CalendarAlpha calendarAlpha = new CalendarAlpha();
-                calendarAlpha.ymd = dr["NENDO"].ToString() + dr["TUKI"].ToString() + dr["NDAY"].ToString();
+                calendarAlpha.ymd = dr["YYDAY"].ToString();
 
                 calendarAlphas.Add(calendarAlpha);
 
 
-               
+
             }
 
             return calendarAlphas;
         }
-       
+
+
+
+
+
+        private async void setRedis(string _Key, object _Val)
+        {
+            // Connection string for your Redis server
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+                    List<ViDoPlan> oDos = _Val as List<ViDoPlan>;
+
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+                    // Set a key-value pair
+                    await db.StringSetAsync($"{_Key}", JsonSerializer.Serialize(oDos));
+
+                }
+
+                // Close the connection
+                redis.Close();
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+        }
+
+
+        private async Task<List<ViDoPlan>> getRedis(string _Key)
+        {
+            // Connection string for your Redis server
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+            string result = "";
+            List<ViDoPlan> oDos = new List<ViDoPlan>();
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+
+                    // Get the value for the key
+                    result = await db.StringGetAsync($"{_Key}");
+
+
+
+                    oDos = JsonSerializer.Deserialize<List<ViDoPlan>>(result);
+
+
+                }
+
+                // Close the connection
+                redis.Close();
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+
+            return oDos;
+        }
+
+
+        private async void deleteRedis(string _key)
+        {
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+                    bool wasDeleted = db.KeyDelete(_key);
+
+                    if (wasDeleted)
+                    {
+                        Console.WriteLine("The 'name' key was deleted from Redis.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("The 'name' key was not found or could not be deleted.");
+                    }
+
+                    // Try to get the value again after deletion
+                    string nameAfterDelete = db.StringGet("name");
+                    Console.WriteLine($"After deletion: {nameAfterDelete}");
+
+
+                }
+
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+        }
+
+        public List<MRESULTDO> calDoPallet(List<MRESULTDO> DOITEM, string vdcode)
+        {
+            DateTime loopDates = DateTime.Now.AddDays(-7);
+            int countLoop = 1;
+            decimal totalBox = 0;
+            decimal totalPallet = 0;
+
+            List<MRESULTDO> _docal = new List<MRESULTDO>();
+            while (countLoop <= 18) // state - enddate
+            {
+
+
+                MRESULTDO doCalPallet = new MRESULTDO();
+
+                if (vdcode == "154018")
+                {
+                    totalBox = DOITEM.Where(x => x.Date.ToString("yyyyMMdd") == loopDates.ToString("yyyyMMdd")).Sum(x => Convert.ToDecimal(x.Do));
+                    totalPallet = DOITEM.Where(x => x.Date.ToString("yyyyMMdd") == loopDates.ToString("yyyyMMdd")).Sum(x => x.Pallet).GetValueOrDefault();
+
+                }
+                else
+                {
+                    totalBox = DOITEM.Where(x => x.Date.ToString("yyyyMMdd") == loopDates.ToString("yyyyMMdd")).Sum(x => x.Box).GetValueOrDefault();
+                    int? palletPerBox = _DBSCM.DoPartMasters.Where(x => x.VdCode == vdcode).FirstOrDefault().BoxPerPallet;
+                    totalPallet = totalBox / Convert.ToDecimal(palletPerBox);
+
+                }
+
+
+                //totalPallet = totalBox / 40;
+
+
+                doCalPallet.PartNo = "TOTAL";
+                doCalPallet.Date = loopDates;
+                doCalPallet.vdCode = "TOTAL";
+                doCalPallet.vdName = "TOTAL";
+                doCalPallet.Vender = "TOTAL";
+
+                doCalPallet.Box = (int)Math.Ceiling(totalBox);
+                doCalPallet.Pallet = (int)Math.Ceiling(totalPallet);
+
+                _docal.Add(doCalPallet);
+
+                loopDates = loopDates.AddDays(1);
+                countLoop++;
+
+            }
+
+            return _docal;
+
+        }
+
+
+
+
+
+
+
     }
 }

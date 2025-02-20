@@ -231,6 +231,8 @@ D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Micro
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Mono.TextTemplating.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Newtonsoft.Json.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Oracle.ManagedDataAccess.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Pipelines.Sockets.Unofficial.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\StackExchange.Redis.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Swashbuckle.AspNetCore.Swagger.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Release\net6.0\Swashbuckle.AspNetCore.SwaggerUI.dll

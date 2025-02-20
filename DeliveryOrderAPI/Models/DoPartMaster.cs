@@ -29,6 +29,8 @@ public partial class DoPartMaster
 
     public int? BoxPerPallet { get; set; }
 
+    public string? WH_NO { get; set; }
+
     public DateTime? UpdateDate { get; set; }
 
     public string? UpdateBy { get; set; }

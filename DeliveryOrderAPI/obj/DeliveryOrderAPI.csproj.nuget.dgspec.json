@@ -72,6 +72,14 @@
               "target": "Package",
               "version": "[3.21.100, )"
             },
+            "Pipelines.Sockets.Unofficial": {
+              "target": "Package",
+              "version": "[2.2.8, )"
+            },
+            "StackExchange.Redis": {
+              "target": "Package",
+              "version": "[2.8.24, )"
+            },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
               "version": "[6.5.0, )"

@@ -7,14 +7,19 @@ using Microsoft.Data.SqlClient;
 using Microsoft.SqlServer.Server;
 using Microsoft.VisualBasic;
 using Oracle.ManagedDataAccess.Client;
+using StackExchange.Redis;
 using System;
+using System.Collections.Generic;
 using System.Data;
+using System.DirectoryServices.ActiveDirectory;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Net;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Security.Policy;
+using System.Text.Json;
+using static DeliveryOrderAPI.Services;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace DeliveryOrderAPI.Controllers
@@ -64,6 +69,12 @@ namespace DeliveryOrderAPI.Controllers
         //***********************************************************************//
         Dictionary<string, DoVenderMaster> DoVenderMasters = new Dictionary<string, DoVenderMaster>();
         Helper oHelper = new Helper();
+
+
+        private string redisHost = "192.168.226.85";
+        private string redisPort = "6379";
+
+
         public DeliveryOrderController(DBSCM contextDBSCM, DBHRM contextDBHRM)
         {
             efSCM = contextDBSCM;
@@ -72,17 +83,52 @@ namespace DeliveryOrderAPI.Controllers
 
         [HttpPost]
         [Route("/getPlans")]
-        public IActionResult getPlans([FromBody] MGetPlan param)
+        public async Task<IActionResult> getPlans([FromBody] MGetPlan param)
         {
             bool? hiddenPartNoPlan = param.hiddenPartNoPlan;
-            MODEL_GET_DO response = serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan , false);
+            MODEL_GET_DO response = await serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan, false);
+            HttpContext.Response.Body = new MemoryStream();
+            await using var writer = new StreamWriter(HttpContext.Response.Body);
+
+            await writer.WriteAsync(JsonSerializer.Serialize(response));
+            await writer.FlushAsync();
+
+            HttpContext.Response.Body.Seek(0, SeekOrigin.Begin);
+            return File(HttpContext.Response.Body, "application/json");
+            //MODEL_GET_DO response = await getRedis("CAL_DO");
+            //return Ok(response);
+        }
+
+        [HttpGet]
+        [Route("/calDO")]
+        public async Task<IActionResult> calDO()
+        {
+            deleteRedis();
+
+            DateTime dtNow = DateTime.Now;
+            string nbr = dtNow.ToString("yyyyMMdd");
+            int rev = 0;
+            DoHistoryDev prev = efSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
+            if (prev != null)
+            {
+                rev = (int)prev.Rev!;
+            }
+            rev++;
+            MODEL_GET_DO response = await serv.CalDO(true, "", null, nbr, rev, false, false);
+      
+
+
+            string _key = "CAL_DO";
+            setRedis(_key, response);
             return Ok(response);
         }
+
 
         [HttpGet]
         [Route("/distribute/{buyer}")]
         public async Task<IActionResult> Distribute(string buyer = "41256")
         {
+            string _key = "CAL_DO";
             int resultInsert = 0;
             DateTime dtNow = DateTime.Now;
             string nbr = dtNow.ToString("yyyyMMdd");
@@ -93,14 +139,14 @@ namespace DeliveryOrderAPI.Controllers
                 rev = (int)prev.Rev!;
             }
             rev++;
-            MODEL_GET_DO DOInfo = serv.CalDO(true, "", null, nbr, rev, false , false);
+            MODEL_GET_DO DOInfo = await serv.CalDO(true, "", null, nbr, rev, false, false);
             foreach (MRESULTDO oDO in DOInfo.data)
             {
                 SqlCommand sqlInsert = new SqlCommand();
                 double Stock = double.IsNaN(oDO.Stock) ? 0 : oDO.Stock;
                 double Do = double.IsNaN(oDO.Do) ? 0 : oDO.Do;
-                sqlInsert.CommandText = $@"INSERT INTO DO_HISTORY_DEV (RUNNING_CODE,REV,MODEL,PARTNO,DATE_VAL,PLAN_VAL,DO_VAL,STOCK_VAL,STOCK,VD_CODE, INSERT_DT,INSERT_BY,REVISION) 
-                                      VALUES ('{nbr}','{rev}','','{oDO.PartNo}','{oDO.Date.ToString("yyyyMMdd")}','{oDO.Plan}','{Do}','{Stock}','0','{oDO.Vender}',GETDATE(),'{buyer}','999')";
+                sqlInsert.CommandText = $@"INSERT INTO DO_HISTORY_DEV (RUNNING_CODE,REV,MODEL,PARTNO,CM,DATE_VAL,PLAN_VAL,DO_VAL,STOCK_VAL,STOCK,VD_CODE, INSERT_DT,INSERT_BY,REVISION) 
+                                      VALUES ('{nbr}','{rev}','','{oDO.PartNo}','{oDO.Cm}', '{oDO.Date.ToString("yyyyMMdd")}','{oDO.Plan}','{Do}','{Stock}','0','{oDO.Vender}',GETDATE(),'{buyer}','999')";
                 int insert = dbSCM.ExecuteNonCommand(sqlInsert);
                 if (insert > 0)
                 {
@@ -119,6 +165,10 @@ namespace DeliveryOrderAPI.Controllers
                 listPrevDay.ForEach(a => a.Revision = 1);
                 efSCM.SaveChanges();
             }
+
+           
+            setRedis(_key, DOInfo);
+
             return Ok(new
             {
                 status = 1,
@@ -387,7 +437,7 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/part/get")]
         public IActionResult MasterGetPart([FromBody] M_MASTER_GET_PART param)
         {
-            var content = efSCM.DoPartMasters.Where(x => x.Partno == param.part).FirstOrDefault();
+            var content = efSCM.DoPartMasters.Where(x => x.Partno == param.part && x.VdCode == param.vdCode).FirstOrDefault();
             return Ok(content);
         }
 
@@ -395,14 +445,20 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/part/update")]
         public IActionResult MasterPartUpdate([FromBody] DoPartMaster param)
         {
-            var content = efSCM.DoPartMasters.FirstOrDefault(x => x.Partno == param.Partno);
+            var content = efSCM.DoPartMasters.FirstOrDefault(x => x.Partno == param.Partno && x.VdCode == param.VdCode);
             if (content != null)
             {
+                content.Cm = param.Cm;
                 content.BoxQty = param.BoxQty;
                 content.BoxMin = param.BoxMin;
                 content.BoxMax = param.BoxMax;
+                content.BoxPerPallet = param.BoxPerPallet;
+                content.Description = param.Description;
                 content.Pdlt = param.Pdlt;
                 content.Unit = param.Unit;
+                content.Active = param.Active;
+                content.UpdateBy = param.UpdateBy;
+                content.UpdateDate = param.UpdateDate;
                 efSCM.Update(content);
             }
             int update = efSCM.SaveChanges();
@@ -821,20 +877,23 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         [HttpPost]
         [Route("/HISTORY/DO")]
         public IActionResult GetHistoryDO([FromBody] DoLogDev obj)
-      {
+        {
             List<DoLogDev> rLogDev = new List<DoLogDev>();
             string date = obj.logToDate;
             string part = obj.logPartNo;
             string doRunning = obj.doRunning;
             double doVal = obj.logDo.HasValue ? (double)obj.logDo : 0;
             int doRev = obj.doRev.HasValue ? (int)obj.doRev : 0;
+            string vdcode = obj.logVdCode;
             SqlCommand sql = new SqlCommand();
-            sql.CommandText = @"SELECT * FROM [dbSCM].[dbo].[DO_LOG_DEV] where LOG_PART_NO = @part and LOG_TO_DATE = @log_to_date and DO_RUNNING = @DO_RUNNING and DO_REV = @DO_REV order by LOG_ID asc";
+            sql.CommandText = @"SELECT * FROM [dbSCM].[dbo].[DO_LOG_DEV]
+                                where LOG_VD_CODE = @VD_CODE and LOG_PART_NO = @part and LOG_TO_DATE = @log_to_date and DO_RUNNING = @DO_RUNNING and DO_REV = @DO_REV order by LOG_ID asc";
             //and LOG_DO = @LOG_DO
             sql.Parameters.Add(new SqlParameter("@part", part));
             sql.Parameters.Add(new SqlParameter("@log_to_date", date));
             sql.Parameters.Add(new SqlParameter("@DO_RUNNING", doRunning));
             sql.Parameters.Add(new SqlParameter("@DO_REV", doRev));
+            sql.Parameters.Add(new SqlParameter("@VD_CODE", vdcode));
             //sql.Parameters.Add(new SqlParameter("@LOG_DO", doVal));
             DataTable dt = dbSCM.Query(sql);
             foreach (DataRow dr in dt.Rows)
@@ -848,10 +907,12 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 item.logNextDate = dr["LOG_NEXT_DATE"].ToString();
                 item.logNextStock = Convert.ToDouble(dr["LOG_NEXT_STOCK"].ToString());
                 item.logDo = Convert.ToDouble(dr["LOG_DO"].ToString());
+                item.logNextDo = Convert.ToDouble(dr["LOG_NEXT_DO"].ToString());
                 item.logBox = Convert.ToDouble(dr["LOG_BOX"].ToString());
                 item.logState = dr["LOG_STATE"].ToString();
                 item.logRemark = dr["LOG_REMARK"].ToString();
-                item.logUpdateDate = Convert.ToDateTime(dr["LOG_UPDATE_DATE"].ToString()); 
+                item.logUpdateDate = Convert.ToDateTime(dr["LOG_UPDATE_DATE"].ToString());
+                item.logUpdateBy = dr["LOG_UPDATE_BY"].ToString();
                 rLogDev.Add(item);
             }
             return Ok(rLogDev);
@@ -872,15 +933,16 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             string empCode = param.empCode;
             double doAdj = param.doVal;
             double doPrev = param.doPrev;
-            List<DoHistoryDev> PrevContent = efSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo).ToList();
+            string _vdcode = param.vdCode;
+            List<DoHistoryDev> PrevContent = efSCM.DoHistoryDevs.Where(x => x.RunningCode == runningCode && x.DateVal == ymd && x.Partno == partNo && x.VdCode == _vdcode).ToList();
             if (PrevContent.Count > 0)
             {
                 string vdCode = PrevContent[0].VdCode!;
                 string ymdTarget = PrevContent[0].DateVal!;
-                DateTime dtStart = DateTime.ParseExact(ymd,"yyyyMMdd",CultureInfo.InvariantCulture);
+                DateTime dtStart = DateTime.ParseExact(ymd, "yyyyMMdd", CultureInfo.InvariantCulture);
                 //List<ViDoPlan> oPlanInfos = serv.GetPlans(vdCode, dtStart, dtStart.AddDays(15));
                 SqlCommand SqlGetHistoryDOofPart = new SqlCommand();
-                SqlGetHistoryDOofPart.CommandText = $@"SELECT [PARTNO] ,[DATE_VAL] ,[PLAN_VAL] ,[DO_VAL] ,[STOCK_VAL] FROM [dbSCM].[dbo].[DO_HISTORY_DEV] WHERE RUNNING_CODE = (  SELECT TOP(1) RUNNING_CODE FROM [dbSCM].[dbo].[DO_HISTORY_DEV] ORDER BY CAST(RUNNING_CODE AS INT ) DESC)  AND DATE_VAL >= '{DateTime.Now.ToString("yyyyMMdd")}' AND REVISION = '999' AND PARTNO = '{partNo}' order by DATE_VAL ASC";
+                SqlGetHistoryDOofPart.CommandText = $@"SELECT [PARTNO] ,[DATE_VAL] ,[PLAN_VAL] ,[DO_VAL] ,[STOCK_VAL] FROM [dbSCM].[dbo].[DO_HISTORY_DEV] WHERE RUNNING_CODE = (  SELECT TOP(1) RUNNING_CODE FROM [dbSCM].[dbo].[DO_HISTORY_DEV] ORDER BY CAST(RUNNING_CODE AS INT ) DESC)  AND DATE_VAL >= '{DateTime.Now.ToString("yyyyMMdd")}' AND REVISION = '999' AND PARTNO = '{partNo}' AND VD_CODE = '{vdCode}' order by DATE_VAL ASC";
                 DataTable dt = dbSCM.Query(SqlGetHistoryDOofPart);
                 int StockSim = 0;
                 foreach (DataRow dr in dt.Rows)
@@ -899,24 +961,27 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                     //}
                     StockSim = (StockSim + DOLoop) - PlnLoop;
                     SqlCommand SqlUpdate = new SqlCommand();
-                    SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_HISTORY_DEV]  SET DO_VAL = '{DOLoop}',STOCK_VAL = '{StockSim}' WHERE RUNNING_CODE = '{param.runningCode}' AND DATE_VAL = '{YMDLoop}' AND PARTNO = '{partNo}' AND REVISION = '999'";
+                    SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_HISTORY_DEV]  SET DO_VAL = '{DOLoop}',STOCK_VAL = '{StockSim}' 
+                                             WHERE RUNNING_CODE = '{param.runningCode}' AND DATE_VAL = '{YMDLoop}' AND PARTNO = '{partNo}' 
+                                             AND REVISION = '999'  AND VD_CODE = '{vdCode}'";
                     int actUpdate = dbSCM.ExecuteNonCommand(SqlUpdate);
                     Console.WriteLine($"DATE : {YMDLoop} PLAN : {PlnLoop} , DO : {DOLoop} SIM : {StockSim})");
 
                     update = actUpdate;
                 }
-                //           DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
-                //           PrevItem.DoVal = doVal;
-                //           efSCM.DoHistoryDevs.Update(PrevItem);
-                //           update = efSCM.SaveChanges();
-                //           if (update > 0)
-                //           {
-                //               SqlCommand sqlInsertLog = new SqlCommand();
-                //               sqlInsertLog.CommandText = @"INSERT INTO [dbo].[DO_LOG_DEV] ([DO_RUNNING],[DO_REV],[LOG_PART_NO],[LOG_VD_CODE] ,[LOG_PROD_LEAD],[LOG_TYPE],[LOG_FROM_DATE],[LOG_FROM_STOCK],[LOG_FROM_PLAN],[LOG_NEXT_DATE],[LOG_NEXT_STOCK],[LOG_TO_DATE],[LOG_DO],[LOG_BOX],[LOG_STATE],[LOG_REMARK],[LOG_CREATE_DATE],[LOG_UPDATE_DATE],[LOG_UPDATE_BY])
-                //VALUES
-                //      ('" + runningCode + "','" + PrevItem.Rev + "','" + partNo + "','" + PrevItem.VdCode + "','2','EDIT_DO','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.PlanVal + "','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.DateVal + "','" + doVal + "','0','referent','edit_do',GETDATE(),GETDATE(),'" + empCode + "') ";
-                //               int insertLog = dbSCM.ExecuteNonCommand(sqlInsertLog);
-                //           }
+                DoHistoryDev PrevItem = PrevContent.FirstOrDefault();
+                //PrevItem.DoVal = doVal;
+                //efSCM.DoHistoryDevs.Update(PrevItem);
+                //update = efSCM.SaveChanges();
+                if (update > 0)
+                {
+                    SqlCommand sqlInsertLog = new SqlCommand();
+                    sqlInsertLog.CommandText = @"INSERT INTO [dbo].[DO_LOG_DEV] ([DO_RUNNING],[DO_REV],[LOG_PART_NO],[LOG_VD_CODE] ,[LOG_PROD_LEAD],[LOG_TYPE],[LOG_FROM_DATE],[LOG_FROM_STOCK],[LOG_FROM_PLAN],[LOG_NEXT_DATE],[LOG_NEXT_STOCK],[LOG_TO_DATE],[LOG_DO],[LOG_NEXT_DO]
+                                ,[LOG_BOX],[LOG_STATE],[LOG_REMARK],[LOG_CREATE_DATE],[LOG_UPDATE_DATE],[LOG_UPDATE_BY])
+                VALUES
+                      ('" + runningCode + "','" + PrevItem.Rev + "','" + partNo + "','" + PrevItem.VdCode + "','2','EDIT_DO','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.PlanVal + "','" + PrevItem.DateVal + "','" + PrevItem.StockVal + "','" + PrevItem.DateVal + "','" + doPrev + "','" + doAdj + "','0','referent','edit_do',GETDATE(),GETDATE(),'" + empCode + "') ";
+                    int insertLog = dbSCM.ExecuteNonCommand(sqlInsertLog);
+                }
             }
             return Ok(new
             {
@@ -972,7 +1037,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         {
             bool status = false;
 
-            foreach(DOPartNumberForPU item in param)
+            foreach (DOPartNumberForPU item in param)
             {
                 string drawing = item.partno.Split(" ")[0];
                 string cm = item.cm;
@@ -1006,7 +1071,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 }
 
             }
-        
+
             return Ok(new
             {
                 status = true
@@ -1027,11 +1092,121 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         }
 
 
+
+        private async void setRedis(string _Key, object _Val)
+        {
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+                    MODEL_GET_DO oDos = _Val as MODEL_GET_DO;
+
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+                    // Set a key-value pair
+                    await db.StringSetAsync($"{_Key}", JsonSerializer.Serialize(oDos));
+
+                }
+
+                // Close the connection
+                redis.Close();
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+        }
+
+
+        private async Task<MODEL_GET_DO> getRedis(string _Key)
+        {
+            // Connection string for your Redis server
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+            string result = "";
+            MODEL_GET_DO oDos = new MODEL_GET_DO();
+
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+
+                    // Get the value for the key
+                    result = await db.StringGetAsync($"{_Key}");
+
+                    oDos = JsonSerializer.Deserialize<MODEL_GET_DO>(result);
+
+
+                }
+
+                // Close the connection
+                redis.Close();
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+
+            return oDos;
+        }
+
+
+        private async void deleteRedis()
+        {
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+                    bool wasDeleted = db.KeyDelete("CAL_DO");
+
+                    if (wasDeleted)
+                    {
+                        Console.WriteLine("The 'name' key was deleted from Redis.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("The 'name' key was not found or could not be deleted.");
+                    }
+
+                    // Try to get the value again after deletion
+                    string nameAfterDelete = db.StringGet("CAL_DO");
+                    Console.WriteLine($"After deletion: {nameAfterDelete}");
+
+
+                }
+
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+
+           
+        }
+
         [HttpGet]
         [Route("/BatchDOWarining")]
 
-        public IActionResult BatchDOWarining()
+        public async Task<IActionResult> BatchDOWarining()
         {
+
 
             DateTime dtNow = DateTime.Now;
             string nbr = dtNow.ToString("yyyyMMdd");
@@ -1047,10 +1222,11 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 rev = (int)prev.Rev!;
             }
 
-            rev++; 
+            rev++;
 
-            MODEL_GET_DO DOInfo = serv.CalDO(false, "", null, nbr, rev, false, true);
+            MODEL_GET_DO DOInfo = await serv.CalDO(true, "", null, nbr, rev, false, false);
 
+            //&& x.Date.DayOfWeek != DayOfWeek.Saturday && x.Date.DayOfWeek != DayOfWeek.Sunday
             List<MRESULTDO> data = DOInfo.data.Where(x => x.Stock < 0).ToList();
 
             var finalData =
@@ -1065,6 +1241,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                                cm = b.Cm,
                                description = b.Description,
                                stock = a.Stock,
+                               _do = a.Do
                            }).Distinct().ToList();
 
 
@@ -1076,22 +1253,23 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
 
 
             int resultInsert = 0;
-            foreach (var item in finalData) { 
+            foreach (var item in finalData)
+            {
 
                 SqlCommand sqlInsert = new SqlCommand();
-                sqlInsert.CommandText = $@"INSERT INTO DO_LOG_STOCK_WARNING ([LOG_RUNNING],[LOG_PARTNO],[LOG_CM],[LOG_DESC],[LOG_VD_CODE],[LOG_VD_NAME],[LOG_STOCK],[LOG_DATE],[REVESION],[LOG_CREATE_DATE],[LOG_CREATE_BY],[LOG_UPDATE_DATE],[LOG_UPADTE_BY]) 
-                   VALUES ('{runningLog}','{item.partNo}','{item.cm}','{item.description}','{item.vdCode}','{item.vdName}','{item.stock}','{item.date}',
-                                    {999},GETDATE(),'system',GETDATE(),'system')";
+                sqlInsert.CommandText = $@"INSERT INTO DO_LOG_STOCK_WARNING ([LOG_RUNNING],[LOG_PARTNO],[LOG_CM],[LOG_DESC],[LOG_VD_CODE],[LOG_VD_NAME],[LOG_STOCK],[LOG_DO],[LOG_DATE],[REVESION],[LOG_CREATE_DATE],[LOG_CREATE_BY],[LOG_UPDATE_DATE],[LOG_UPADTE_BY]) 
+                   VALUES ('{runningLog}','{item.partNo}','{item.cm}','{item.description}','{item.vdCode}','{item.vdName}','{Math.Ceiling(item.stock)}','{item._do}'
+                            ,'{Convert.ToDateTime(item.date).ToString("yyyy-MM-dd HH:mm:ss")}',{999},GETDATE(),'system',GETDATE(),'system')";
                 int insert = dbSCM.ExecuteNonCommand(sqlInsert);
                 if (insert > 0)
                 {
                     resultInsert = resultInsert + 1;
                 }
             }
-        
-            if(resultInsert > 0 && dtPrev.Rows.Count > 0)
+
+            if (resultInsert > 0 && dtPrev.Rows.Count > 0)
             {
-           
+
                 SqlCommand SqlUpdate = new SqlCommand();
                 SqlUpdate.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_LOG_STOCK_WARNING]  
                                     SET REVESION = '1',LOG_UPDATE_DATE = GETDATE() 
@@ -1108,7 +1286,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             //    int actUpdate = dbSCM.ExecuteNonCommand(SqlUpdate);
             //}
 
-    
+
 
 
             return Ok();
@@ -1121,63 +1299,272 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
 
 
 
+
+
+
+
+        //[HttpGet]
+        //[Route("/DOWarining")]
+
+        //public IActionResult DOWarining()
+        //{
+
+        //    int round = GetPeriod(DateTime.Now, 3);
+
+        //    string[] color = new string[5] { "bg-red-100", "bg-green-100", "bg-yellow-100", "bg-purple-100", "bg-orange-100" };
+        //    int holiday = 2;
+
+        //    SqlCommand findHolidayCount = new SqlCommand();
+        //    findHolidayCount.CommandText = $@" WITH DateRange AS (
+        //                                        SELECT GETDATE() AS CurrentDate
+        //                                        UNION ALL
+        //                                        SELECT DATEADD(DAY, 1, CurrentDate)
+        //                                        FROM DateRange
+        //                                        WHERE CurrentDate < GETDATE() + 2
+        //                                    )
+
+        //                                    SELECT COUNT(CurrentDate) COUNT_H
+        //                                    FROM DateRange
+        //                                    WHERE DATEPART(WEEKDAY, CurrentDate) IN (1, 7)  
+        //                                    OPTION (MAXRECURSION 0);";
+
+        //    DataTable dtfindHolidayCount = dbSCM.Query(findHolidayCount);
+
+        //    if (dtfindHolidayCount.Rows.Count > 0)
+        //    {
+        //        foreach (DataRow dr in dtfindHolidayCount.Rows)
+        //        {
+        //            holiday += Convert.ToInt32(dr["COUNT_H"]);
+        //        }
+        //    }
+
+
+
+        //     List<StockWarning> stockWarnings = new List<StockWarning>();
+
+        //    SqlCommand sqlSelectShortageStock = new SqlCommand();
+        //    sqlSelectShortageStock.CommandText = $@" SELECT  LOG_RUNNING,[LOG_VD_CODE],LOG_VD_NAME 
+        //         FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING] 
+        //         where [REVESION] = 999 and LOG_DATE >= CONVERT(DATE,GETDATE()) and LOG_DATE <= CONVERT(DATE,GETDATE() + {holiday}) 
+        //GROUP BY LOG_VD_CODE,LOG_VD_NAME,LOG_RUNNING
+        //         ORDER BY LOG_VD_CODE";
+        //    DataTable dtSelectShortageStock = dbSCM.Query(sqlSelectShortageStock);
+
+        //    if (dtSelectShortageStock.Rows.Count > 0)
+        //    {
+        //        foreach (DataRow dr in dtSelectShortageStock.Rows)
+        //        {
+
+        //            StockWarning mainWarining = new StockWarning();
+        //            string format = "yyyyMMddHHmm";
+
+        //            string vdCode = dr["LOG_VD_CODE"].ToString();
+
+
+        //            mainWarining.dateRound = DateTime.ParseExact(dr["LOG_RUNNING"].ToString(), format, CultureInfo.InvariantCulture);
+
+        //            mainWarining.vdCode = dr["LOG_VD_CODE"].ToString();
+        //            mainWarining.vdName = dr["LOG_VD_NAME"].ToString();
+        //            //mainWarining.item = Convert.ToInt16(dr["ITEM"]);
+
+        //            int round = 0;
+        //            int colorIndex = 0;
+        //            SqlCommand sqlGroupVender = new SqlCommand();
+        //            sqlGroupVender.CommandText = $@"
+        //   				  SELECT [LOG_PARTNO],[LOG_CM],[LOG_DESC]
+        //                ,[LOG_STOCK],[LOG_DO],[LOG_DATE]
+        //                 FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING] 
+        //                 where [REVESION] = 999 and LOG_VD_CODE = '{vdCode}' and LOG_DATE >= CONVERT(DATE,GETDATE()) and LOG_DATE <= CONVERT(DATE,GETDATE() + {holiday}) ";
+
+        //            DataTable dtGroupVender = dbSCM.Query(sqlGroupVender);
+
+        //            if (dtGroupVender.Rows.Count > 0)
+        //            {
+
+        //                List<VenderGroup> groupList = new List<VenderGroup>();
+
+        //                foreach (DataRow drGroupVender in dtGroupVender.Rows)
+        //                {
+
+
+
+        //                    VenderGroup venderGroup = new VenderGroup();
+
+
+
+
+        //                    int _do = (Convert.IsDBNull(drGroupVender["LOG_DO"]) ? 0 : Convert.ToInt32(drGroupVender["LOG_DO"]));
+        //                    int stock = 0;
+
+
+
+
+
+        //                    if (Convert.ToDateTime(drGroupVender["LOG_DATE"]).ToString("yyyyMMdd") == DateTime.Now.ToString("yyyyMMdd"))
+        //                    {
+        //                        stock = Convert.ToInt32(drGroupVender["LOG_STOCK"]) - _do;
+        //                    }
+        //                    else
+        //                    {
+        //                        stock = Convert.ToInt32(drGroupVender["LOG_STOCK"]);
+        //                    }
+
+
+
+
+        //                    venderGroup.date = Convert.ToDateTime(drGroupVender["LOG_DATE"]);
+        //                    venderGroup.partNo = drGroupVender["LOG_PARTNO"].ToString();
+        //                    venderGroup.cm = drGroupVender["LOG_CM"].ToString();
+        //                    venderGroup.description = drGroupVender["LOG_DESC"].ToString();
+        //                    venderGroup.stock = stock;
+        //                    venderGroup._do = _do;
+
+        //                    if ((round == 0 ? venderGroup.partNo : groupList[round - 1].partNo) != venderGroup.partNo)
+        //                    {
+        //                        colorIndex++;
+        //                    }
+
+        //                    venderGroup.color = color[colorIndex];
+
+
+        //                    groupList.Add(venderGroup);
+
+        //                    round++;
+
+
+
+        //                }
+
+        //                mainWarining._venderGroup = groupList;
+        //            }
+
+        //            mainWarining.item = mainWarining._venderGroup.Count();
+        //            stockWarnings.Add(mainWarining);
+
+        //        }
+        //    }
+
+
+        //    return Ok(stockWarnings);
+
+
+        //}
+
+
+
         [HttpGet]
         [Route("/DOWarining")]
 
         public IActionResult DOWarining()
         {
-
-           List<StockWarning> stockWarnings = new List<StockWarning>();
-
-            //var finalData =
-            //              (from a in data
-            //               join b in DOInfo.PartMaster on a.PartNo equals b.Partno
-            //               select new
-            //               {
-            //                   date = a.Date,
-            //                   vdCode = a.vdCode,
-            //                   vdName = a.vdName,
-            //                   partNo = a.PartNo,
-            //                   cm = b.Cm,
-            //                   description = b.Description,
-            //                   stock = a.Stock,
-            //               }).ToList();
-
-
-
+            int period = GetPeriod(DateTime.Now, 3);
+            string[] color = new string[2] { "bg-white", "bg-gray-200" };
+            List<StockWarning> stockWarnings = new List<StockWarning>();
             SqlCommand sqlSelectShortageStock = new SqlCommand();
-            sqlSelectShortageStock.CommandText = $@"SELECT [LOG_ID],[LOG_RUNNING],[LOG_PARTNO],[LOG_CM],[LOG_DESC]
-              ,[LOG_VD_CODE],[LOG_VD_NAME],[LOG_STOCK],[LOG_DATE],[REVESION],[LOG_CREATE_DATE]
-              ,[LOG_CREATE_BY],[LOG_UPDATE_DATE],[LOG_UPADTE_BY]
-             FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING] 
-             where [REVESION] = 999";
+            sqlSelectShortageStock.CommandText = $@" SELECT  LOG_RUNNING,[LOG_VD_CODE],LOG_VD_NAME 
+                 FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING] 
+                 where [REVESION] = 999 and LOG_DATE >= CONVERT(DATE,GETDATE()) and LOG_DATE <= CONVERT(DATE,GETDATE() + {period}) 
+			     GROUP BY LOG_VD_CODE,LOG_VD_NAME,LOG_RUNNING
+                 ORDER BY LOG_VD_CODE";
             DataTable dtSelectShortageStock = dbSCM.Query(sqlSelectShortageStock);
 
-            if(dtSelectShortageStock.Rows.Count > 0)
+            if (dtSelectShortageStock.Rows.Count > 0)
             {
                 foreach (DataRow dr in dtSelectShortageStock.Rows)
                 {
-                    StockWarning warning = new StockWarning();
-            
+                    StockWarning mainWarining = new StockWarning();
                     string format = "yyyyMMddHHmm";
-                    warning.dateRound = DateTime.ParseExact(dr["LOG_RUNNING"].ToString(), format, CultureInfo.InvariantCulture); ;
-                    warning.date = Convert.ToDateTime(dr["LOG_DATE"]);
-                    warning.vdCode = dr["LOG_VD_CODE"].ToString();
-                    warning.vdName = dr["LOG_VD_NAME"].ToString();
-                    warning.partNo = dr["LOG_PARTNO"].ToString();
-                    warning.cm = dr["LOG_CM"].ToString();
-                    warning.description = dr["LOG_DESC"].ToString();
-                    warning.stock = Convert.ToInt32(dr["LOG_STOCK"]);
+                    string vdCode = dr["LOG_VD_CODE"].ToString();
+                    mainWarining.dateRound = DateTime.ParseExact(dr["LOG_RUNNING"].ToString(), format, CultureInfo.InvariantCulture);
+                    mainWarining.vdCode = dr["LOG_VD_CODE"].ToString();
+                    mainWarining.vdName = dr["LOG_VD_NAME"].ToString();
+                    //mainWarining.item = Convert.ToInt16(dr["ITEM"]);
 
-                    stockWarnings.Add(warning);
+                    int round = 0;
+                    int colorIndex = 0;
+                    SqlCommand sqlGroupVender = new SqlCommand();
+                    sqlGroupVender.CommandText = $@"
+			        				  SELECT [LOG_PARTNO],[LOG_CM],[LOG_DESC]
+				                    ,[LOG_STOCK],[LOG_DO],[LOG_DATE]
+				                     FROM [dbSCM].[dbo].[DO_LOG_STOCK_WARNING] 
+				                     where [REVESION] = 999 and LOG_VD_CODE = '{vdCode}' and LOG_DATE >= CONVERT(DATE,GETDATE()) and LOG_DATE <= CONVERT(DATE,GETDATE() + {period}) ";
+
+                    DataTable dtGroupVender = dbSCM.Query(sqlGroupVender);
+
+                    if (dtGroupVender.Rows.Count > 0)
+                    {
+
+                        List<VenderGroup> groupList = new List<VenderGroup>();
+
+                        foreach (DataRow drGroupVender in dtGroupVender.Rows)
+                        {
+
+
+
+                            VenderGroup venderGroup = new VenderGroup();
+
+
+
+
+                            int _do = (Convert.IsDBNull(drGroupVender["LOG_DO"]) ? 0 : Convert.ToInt32(drGroupVender["LOG_DO"]));
+                            int stock = 0;
+
+
+
+
+
+                            if (Convert.ToDateTime(drGroupVender["LOG_DATE"]).ToString("yyyyMMdd") == DateTime.Now.ToString("yyyyMMdd"))
+                            {
+                                stock = Convert.ToInt32(drGroupVender["LOG_STOCK"]) - _do;
+                            }
+                            else
+                            {
+                                stock = Convert.ToInt32(drGroupVender["LOG_STOCK"]);
+                            }
+
+
+
+
+                            venderGroup.date = Convert.ToDateTime(drGroupVender["LOG_DATE"]);
+                            venderGroup.partNo = drGroupVender["LOG_PARTNO"].ToString();
+                            venderGroup.cm = drGroupVender["LOG_CM"].ToString();
+                            venderGroup.description = drGroupVender["LOG_DESC"].ToString();
+                            venderGroup.stock = stock;
+                            venderGroup._do = _do;
+
+                            if ((round == 0 ? venderGroup.partNo : groupList[round - 1].partNo) != venderGroup.partNo)
+                            {
+
+                                if (round == 0  || colorIndex >= 1)
+                                {
+                                    colorIndex = 0;
+                                }
+                                else
+                                {
+                                    colorIndex++;
+                                }
+
+                            }
+
+                            venderGroup.color = color[colorIndex];
+
+
+                            groupList.Add(venderGroup);
+
+                            round++;
+
+
+
+                        }
+
+                        mainWarining._venderGroup = groupList;
+                    }
+
+                    mainWarining.item = mainWarining._venderGroup.Count();
+                    stockWarnings.Add(mainWarining);
 
                 }
             }
-
-
-        
-
-
 
 
             return Ok(stockWarnings);
@@ -1185,50 +1572,13 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
 
         }
 
-        //private List<MRESULTDO> findStockIsMinus(List<MRESULTDO> data)
-        //{
-
-        //    List<MRESULTDO> result = new List<MRESULTDO>();
-
-
-
-        //    string getVender = @"SELECT [VD_CODE],[VD_DESC],[VD_PROD_LEAD]
-        //                         FROM [dbSCM].[dbo].[DO_VENDER_MASTER]";
-
-        //    SqlCommand sql = new SqlCommand();
-
-        //    sql.CommandText = getVender;
-        //    DataTable dt = dbSCM.Query(sql);
-        //    if (dt.Rows.Count > 0)
-        //    {
-        //        foreach (DataRow dr in dt.Rows)
-        //        {
-        //            List<MRESULTDO> rawData = new List<MRESULTDO>();
-
-        //            string vdCode = dr["VD_CODE"].ToString();
-        //            DateTime stDate = DateTime.Now;
-        //            DateTime enDate = DateTime.Now.AddDays(Convert.ToInt16(dr["VD_PROD_LEAD"])-1);
-
-
-        //            rawData = data.Where(x => x.Date >= stDate &&  x.Date <= enDate && x.vdCode == vdCode && x.Stock < 0).ToList();
-
-        //            result.AddRange(rawData);
-
-
-
-        //        }
-        //    }
-
-
-        //    return result;
-        //}
 
 
 
         [HttpGet]
         [Route("/getPartMstrPU/{vdcode}/{empcode}")]
 
-        public IActionResult getPartMstrPU(string vdcode , string empcode)
+        public IActionResult getPartMstrPU(string vdcode, string empcode)
         {
 
             List<DOPartNumberForPU> dOPartNumberForPUs = new List<DOPartNumberForPU>();
@@ -1239,9 +1589,9 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                                 where HTCODE = '" + vdcode + "'";
             DataTable dt = dbAlpha.Query(cmd);
 
-            if(dt.Rows.Count > 0)
+            if (dt.Rows.Count > 0)
             {
-                foreach(DataRow dr in dt.Rows)
+                foreach (DataRow dr in dt.Rows)
                 {
                     DOPartNumberForPU dOPartNumberForPU = new DOPartNumberForPU();
 
@@ -1265,5 +1615,159 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
         }
 
 
+
+        [HttpGet]
+        [Route("/deleteRadis")]
+        public IActionResult deleteRadis()
+        {
+            string redisConnectionString = $"{redisHost}:{redisPort}"; // Replace with your Redis server's address and port
+
+            try
+            {
+                // Connect to the Redis server
+                var redis = ConnectionMultiplexer.Connect(redisConnectionString);
+
+                if (redis.IsConnected)
+                {
+
+                    // Get a database instance
+                    IDatabase db = redis.GetDatabase();
+                    bool wasDeleted = db.KeyDelete("CAL_DO");
+
+                    if (wasDeleted)
+                    {
+                        Console.WriteLine("The 'name' key was deleted from Redis.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("The 'name' key was not found or could not be deleted.");
+                    }
+
+                    // Try to get the value again after deletion
+                    string nameAfterDelete = db.StringGet("DO_PrdPlan_20250121");
+                    Console.WriteLine($"After deletion: {nameAfterDelete}");
+
+
+                }
+
+            }
+            catch (Exception ex)
+            {
+                //Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+
+            return Ok();
+        }
+
+
+
+
+        [HttpGet]
+        [Route("/update/partMaster/WH")]
+        public IActionResult updateMasterWH()
+        {
+
+
+
+            SqlCommand sqlGetMasterWH = new SqlCommand();
+            sqlGetMasterWH.CommandText = $@"
+			         SELECT distinct [PART_ID],[PARTNO],[CM]
+                     FROM [dbSCM].[dbo].[DO_PART_MASTER]
+                     where ACTIVE = 'ACTIVE'";
+
+            DataTable dtupdateMasterWH = dbSCM.Query(sqlGetMasterWH);
+            foreach (DataRow dr in dtupdateMasterWH.Rows)
+            {
+                string cm = dr["CM"].ToString() == "" ? " " : dr["CM"].ToString();
+
+                OracleCommand cmd = new();
+                cmd.CommandText = @"SELECT PARTNO,CM,LOCA1 FROM DST_MSTSB1
+                                where PARTNO = '" + dr["PARTNO"] + "' and CM = '" + cm + "'";
+                DataTable dtcmd = dbAlpha2.Query(cmd);
+                if (dtcmd.Rows.Count > 0)
+                {
+                    foreach (DataRow orcalCMD in dtcmd.Rows)
+                    {
+                        string compareLocal = orcalCMD["LOCA1"].ToString().StartsWith("A") ? "WH1" :
+                            (orcalCMD["LOCA1"].ToString().StartsWith("B") ? "WH2" : (orcalCMD["LOCA1"].ToString().StartsWith("AX") ? "CANCE" :
+
+                            (orcalCMD["LOCA1"].ToString().StartsWith("NEW") ? "NEW" : "")
+                            ));
+
+
+                        SqlCommand sqlupdateMasterWH = new SqlCommand();
+                        sqlupdateMasterWH.CommandText = $@"UPDATE [dbSCM].[dbo].[DO_PART_MASTER]
+                                                           SET WH_NO = '{compareLocal}'
+                                                           WHERE PARTNO = '{orcalCMD["PARTNO"].ToString()}' and CM = '{orcalCMD["CM"]}'";
+                        int insert = dbSCM.ExecuteNonCommand(sqlupdateMasterWH);
+
+
+
+                    }
+                }
+
+            }
+
+
+            return Ok();
+
+
+
+
+        }
+
+
+        public class PeriodInfo
+        {
+
+            public string startdate { set; get; }
+            public string enddate { set; get; }
+        }
+
+        [NonAction]
+        public int GetPeriod(DateTime dataDate, int period)
+        {
+            PeriodInfo mRes = new PeriodInfo();
+
+            OracleCommand strGetPo = new OracleCommand();
+            strGetPo.CommandText = $@"SELECT YYDAY, NENDO
+                                     FROM ND_CAL_TBL_V1
+                                     WHERE JIBU='64' AND CAL='CAL' AND YYDAY BETWEEN '{dataDate.ToString("yyyyMMdd")}' AND '{dataDate.AddDays(30).ToString("yyyyMMdd")}' 
+                                            AND FUKAKU = 0  ";
+            DataTable dt = dbAlpha.Query(strGetPo);
+
+            int loop = 0, loopday = 0;
+            while (loop < period)
+            {
+                DataRow[] dr = dt.Select($" YYDAY='{dataDate.AddDays(loopday).ToString("yyyyMMdd")}' ");
+                //if (dr.Length > 0)
+                //{
+                //    if (loop == 0)
+                //    {
+                //        mRes.startdate = dataDate.AddDays(loopday).ToString("yyyyMMdd");
+                //    }
+                //    else if (loop == period)
+                //    {
+                //        mRes.enddate = dataDate.AddDays(loopday).ToString("yyyyMMdd");
+                //    }
+                //    loop++;
+                //}
+
+                //loopday++;
+
+                if (dr.Length > 0)
+                {
+
+                }
+                else
+                {
+                    loop++;
+                }
+                loopday++;
+            }
+
+            return loopday;
+
+        }
     }
 }

@@ -35,6 +35,8 @@ D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTm
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Microsoft.Win32.SystemEvents.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Newtonsoft.Json.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Oracle.ManagedDataAccess.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Pipelines.Sockets.Unofficial.dll
+D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\StackExchange.Redis.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Swashbuckle.AspNetCore.Swagger.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Swashbuckle.AspNetCore.SwaggerGen.dll
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Release\net6.0\PubTmp\Out\Swashbuckle.AspNetCore.SwaggerUI.dll

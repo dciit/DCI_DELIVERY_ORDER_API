@@ -3,6 +3,8 @@
     public class MRESULTDO
     {
         public string PartNo { get; set; }  
+
+        public string Cm { get; set; }
         public double Plan {  get; set; }   
         public double PlanPrev {  get; set; }
         public double Do { get; set; }
@@ -22,6 +24,10 @@
         public bool? changePlan { get; set; } = false;
 
         public decimal? HistoryDevPlanQTY { get; set; } = 0;
+
+        public int? Box { get; set; } = 0;
+
+        public int? Pallet { get; set; } = 0;
 
     }
 }

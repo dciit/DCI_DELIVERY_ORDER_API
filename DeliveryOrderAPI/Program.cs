@@ -31,7 +31,7 @@ if (app.Environment.IsDevelopment())
 }
 //app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseResponseCompression(
 app.MapControllers();
 
 app.Run();

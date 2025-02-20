@@ -9,5 +9,7 @@
         public double doVal { get; set; }
         public double doPrev { get; set; }
         public string? empCode { get; set; }
+
+        public string? vdCode { get; set; }
     }
 }

@@ -17,6 +17,8 @@
         public double? logNextStock { get; set; } = 0;
         public double? logToStock { get; set; } = 0;
         public double? logDo { get; set; } = 0;
+
+        public double? logNextDo { get; set; } = 0;
         public double? logBox { get; set; } = 0;
         public string? logState { get; set; }
         public DateTime? logCreateDate { get; set; }
