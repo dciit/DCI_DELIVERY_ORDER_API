@@ -87,16 +87,16 @@ namespace DeliveryOrderAPI.Controllers
         {
             bool? hiddenPartNoPlan = param.hiddenPartNoPlan;
             MODEL_GET_DO response = await serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan, false);
-            HttpContext.Response.Body = new MemoryStream();
+           /* HttpContext.Response.Body = new MemoryStream();
             await using var writer = new StreamWriter(HttpContext.Response.Body);
 
             await writer.WriteAsync(JsonSerializer.Serialize(response));
-            await writer.FlushAsync();
+            await writer.FlushAsync();*/
 
-            HttpContext.Response.Body.Seek(0, SeekOrigin.Begin);
-            return File(HttpContext.Response.Body, "application/json");
+            //HttpContext.Response.Body.Seek(0, SeekOrigin.Begin);
+            //return File(HttpContext.Response.Body, "application/json");
             //MODEL_GET_DO response = await getRedis("CAL_DO");
-            //return Ok(response);
+            return Ok(response);
         }
 
         [HttpGet]
@@ -180,10 +180,10 @@ namespace DeliveryOrderAPI.Controllers
         [Route("/do/update")]
         public IActionResult DO_UPDATE([FromBody] M_DO_UPDATE param)
         {
-            if (param.empCode != "41256")
-            {
-                return Ok(new { status = false, message = "ปิดระบบการแก้ไขชั่วคราว ติดต่อ IT 611 เบียร์" });
-            }
+            //if (param.empCode != "41256")
+            //{
+            //    return Ok(new { status = false, message = "ปิดระบบการแก้ไขชั่วคราว ติดต่อ IT 611 เบียร์" });
+            //}
             double? stock = 0;
             double? _do = 0;
             int status = 1;

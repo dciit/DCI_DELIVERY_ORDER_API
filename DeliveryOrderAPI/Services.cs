@@ -691,8 +691,58 @@ namespace DeliveryOrderAPI
             string YMDFormat = "yyyyMMdd";
             DateTime dtNow = DateTime.Now;
             //DateTime dtNow = new DateTime(2025,02,05);
+
             DateTime dtEnd = dtNow.AddDays(14);
-            DateTime dtEndFixed = dtNow.AddDays((vdMaster.VdProdLead != null ? (int)vdMaster.VdProdLead : 0) - 1);
+            int nProdLeadOfSupplier = 3;
+            try
+            {
+                DateTime dtPeriod = dtNow;
+                int nLoop = nProdLeadOfSupplier;
+                while (nLoop > 0) // ลูปเพื่อหาว่าวันที่สิ้นสุด Fixed คือวันไหน
+                {
+                    string ShortDay = dtPeriod.ToString("ddd");
+                    bool Avaliable = false;
+                    switch (ShortDay)
+                    {
+                        case "Mon":
+                            Avaliable = (vdMaster.VdMon == true) ? true : false;
+                            break;
+                        case "Tue":
+                            Avaliable = (vdMaster.VdTue == true) ? true : false;
+                            break;
+                        case "Wed":
+                            Avaliable = (vdMaster.VdWed == true) ? true : false;
+                            break;
+                        case "Thu":
+                            Avaliable = (vdMaster.VdThu == true) ? true : false;
+                            break;
+                        case "Fri":
+                            Avaliable = (vdMaster.VdFri == true) ? true : false;
+                            break;
+                        case "Sat":
+                            Avaliable = (vdMaster.VdSat == true) ? true : false;
+                            break;
+                        case "Sun":
+                            Avaliable = (vdMaster.VdSun == true) ? true : false;
+                            break;
+                        default:
+                            Avaliable = false;
+                            break;
+                    }
+                    if (Avaliable == true)
+                    {
+                        dtPeriod = dtPeriod.AddDays(1);
+                        nLoop--;
+                    }
+                }
+            }
+            catch
+            {
+                nProdLeadOfSupplier = 3;
+            }
+            //DateTime dtEndFixed = dtNow.AddDays((vdMaster.VdProdLead != null ? (int)vdMaster.VdProdLead : 0) - 1);
+
+
             //DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22, 0, 0);
             //if (dtNow > dt3PM)
             //{
@@ -700,6 +750,41 @@ namespace DeliveryOrderAPI
             //    dtEndFixed = dtEndFixed.AddDays(1);
             //}
             dtLoop = dtLoop.AddDays(-2); // หาวันที่สามารถลงยอด D/O ได้ใกล้และเร็วที่สุดจากวันที่ Stock ติดลบ - PrdLeadtime
+            //bool statedayoff = false; // true ส่ง false ไม่ส่ง
+
+            //switch (dtLoop.ToString("ddd"))
+            //{
+            //    case "Mon":
+            //        statedayoff = (vdMaster.VdMon == true) ? true : false;
+            //        break;
+            //    case "Tue":
+            //        statedayoff = (vdMaster.VdTue == true) ? true : false;
+            //        break;
+            //    case "Wed":
+            //        statedayoff = (vdMaster.VdWed == true) ? true : false;
+            //        break;
+            //    case "Thu":
+            //        statedayoff = (vdMaster.VdThu == true) ? true : false;
+            //        break;
+            //    case "Fri":
+            //        statedayoff = (vdMaster.VdFri == true) ? true : false;
+            //        break;
+            //    case "Sat":
+            //        statedayoff = (vdMaster.VdSat == true) ? true : false;
+            //        break;
+            //    case "Sun":
+            //        statedayoff = (vdMaster.VdSun == true) ? true : false;
+            //        break;
+            //    default:
+            //        statedayoff = false;
+            //        break;
+            //}
+
+
+            //if (vdMaster.) // เช็คว่าหาก -2 วัน ห้ามตรงกับ holiday, delivery cycle supplier
+            //{
+
+            //}
             //if (dtLoop.Date < dtEndFixed.Date)
             //{
 
@@ -707,7 +792,6 @@ namespace DeliveryOrderAPI
             //}
             if (dtLoop.Date <= dtEndFixed.Date)
             {
-
                 dtLoop = dtEndFixed.AddDays(1);
             }
             bool isHoliday = false;
@@ -716,7 +800,6 @@ namespace DeliveryOrderAPI
             if (CanDelivery)
             {
                 CanDelivery = holiday.Any(x => Convert.ToInt32(x.ymd) == Convert.ToInt32(dtLoop.ToString("yyyyMMdd"))) == true ? false : true;
-
             }
             bool Increment = false; // สำหรับการ เพิ่ม หรือ ลด วันที่ เพื่อหาวันที่สามารถจัดส่งได้ false -1 
             while (CanDelivery == false)
