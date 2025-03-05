@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 using System.Reflection.Emit;
+using DeliveryOrderAPI.Props;
 
 namespace DeliveryOrderAPI
 {
@@ -33,6 +34,7 @@ namespace DeliveryOrderAPI
         private Helper oHelper = new Helper();
         private string redisHost = "192.168.226.85";
         private string redisPort = "6379";
+        PropGetFixedOfSupplier FixedInfos = new PropGetFixedOfSupplier();
         public Services(DBSCM dBSCM, DBHRM dBHRM)
         {
             _DBSCM = dBSCM;
@@ -224,8 +226,10 @@ namespace DeliveryOrderAPI
         {
             List<MPO> res = new List<MPO>();
             OracleCommand cmd = new();
-            cmd.CommandText = @"SELECT A.PARTNO,A.DELYMD,SUM(A.WHBLBQTY)  AS WHBLBQTY,B.HTCODE FROM GST_DATOSD A LEFT JOIN GST_DATOSC B ON A.PONO = B.PONO WHERE  A.apbit in ('U','P') AND TRIM(A.PARTNO) IN ('" + PartJoin + "')  AND A.DELYMD >= '" + sDate.ToString("yyyyMMdd") + "' AND A.DELYMD <= '" + eDate.ToString("yyyyMMdd") + "' GROUP BY A.PARTNO,A.DELYMD,B.HTCODE";
-            DataTable dt = dbAlpha.Query(cmd);
+            cmd.CommandText = @"SELECT A.PARTNO,A.DELYMD,SUM(A.WHBLBQTY)  AS WHBLBQTY,B.HTCODE FROM GST_DATOSD A LEFT JOIN GST_DATOSC B ON A.PONO = B.PONO WHERE  A.apbit in ('U','P') AND TRIM(A.PARTNO) IN ('" + PartJoin + "')  GROUP BY A.PARTNO,A.DELYMD,B.HTCODE";
+
+            //" AND A.DELYMD >= '" + sDate.ToString("yyyyMMdd") + "' AND A.DELYMD <= '" + eDate.ToString("yyyyMMdd") + "'" +
+          DataTable dt = dbAlpha.Query(cmd);
             foreach (DataRow dr in dt.Rows)
             {
                 MPO item = new MPO();
@@ -238,13 +242,8 @@ namespace DeliveryOrderAPI
             return res;
         }
         public List<ViDoPlan> GetPlans(string supplier, DateTime sDate, DateTime fDate)
-        {
-
-
-
-
-            //********* (1) GET PLAN [NEW] ***********
-
+        { 
+            //********* (1) GET PLAN [NEW] *********** 
             List<DoPlanP91> doPlanP91s = new List<DoPlanP91>();
             OracleCommand cmd = new();
             cmd.CommandText = @$"SELECT  WCNO, PRDYMD, MODEL, SUM(QTY) QTY FROM(    
@@ -675,134 +674,26 @@ namespace DeliveryOrderAPI
 
             return jwt;
         }
-        //internal int DayAvailable(DateTime dtLoop, List<DoDictMstr> rDictHoliday, Dictionary<string, bool> venderDelivery)
-        //{
-        //    int index = -1;
-        //    List<string> rRestDay = venderDelivery.Where(x => x.Value == true).Select(x => x.Key).ToList();
-        //    string ShortDay = dtLoop.ToString("ddd").ToUpper();
-        //    index = rRestDay.FindIndex(x => x == ShortDay); // Short Day ตรงกับวัน
-        //    bool isHoliday = rDictHoliday.FirstOrDefault(x => x.Code == dtLoop.ToString("yyyyMMdd")) != null ? true : false;
-        //    index = isHoliday == true ? -1 : index; // -1 คือไม่สามารถส่งได้
-        //    return index;
-        //}
 
-        internal List<MRESULTDO> ADJ_DO(List<MRESULTDO> response, string vender, string part, DateTime dtLoop, double DO, Dictionary<string, bool> VdMaster, DoVenderMaster vdMaster, double PORemain, int? BoxQty, List<CalendarAlpha> holiday)
+        internal List<MRESULTDO> ADJ_DO(List<MRESULTDO> response, string vender, string part, DateTime dtLoop, double DO, Dictionary<string, bool> VdMaster, DoVenderMaster vdMaster, double PORemain, int? BoxQty)
         {
             string YMDFormat = "yyyyMMdd";
             DateTime dtNow = DateTime.Now;
-            //DateTime dtNow = new DateTime(2025,02,05);
-
+            DateTime dtEndFixed = FixedInfos.end_date;
             DateTime dtEnd = dtNow.AddDays(14);
-            int nProdLeadOfSupplier = 3;
-            try
-            {
-                DateTime dtPeriod = dtNow;
-                int nLoop = nProdLeadOfSupplier;
-                while (nLoop > 0) // ลูปเพื่อหาว่าวันที่สิ้นสุด Fixed คือวันไหน
-                {
-                    string ShortDay = dtPeriod.ToString("ddd");
-                    bool Avaliable = false;
-                    switch (ShortDay)
-                    {
-                        case "Mon":
-                            Avaliable = (vdMaster.VdMon == true) ? true : false;
-                            break;
-                        case "Tue":
-                            Avaliable = (vdMaster.VdTue == true) ? true : false;
-                            break;
-                        case "Wed":
-                            Avaliable = (vdMaster.VdWed == true) ? true : false;
-                            break;
-                        case "Thu":
-                            Avaliable = (vdMaster.VdThu == true) ? true : false;
-                            break;
-                        case "Fri":
-                            Avaliable = (vdMaster.VdFri == true) ? true : false;
-                            break;
-                        case "Sat":
-                            Avaliable = (vdMaster.VdSat == true) ? true : false;
-                            break;
-                        case "Sun":
-                            Avaliable = (vdMaster.VdSun == true) ? true : false;
-                            break;
-                        default:
-                            Avaliable = false;
-                            break;
-                    }
-                    if (Avaliable == true)
-                    {
-                        dtPeriod = dtPeriod.AddDays(1);
-                        nLoop--;
-                    }
-                }
-            }
-            catch
-            {
-                nProdLeadOfSupplier = 3;
-            }
-            //DateTime dtEndFixed = dtNow.AddDays((vdMaster.VdProdLead != null ? (int)vdMaster.VdProdLead : 0) - 1);
-
-
-            //DateTime dt3PM = new DateTime(dtNow.Year, dtNow.Month, dtNow.Day, 22, 0, 0);
-            //if (dtNow > dt3PM)
-            //{
-            //    //over3PM = true;
-            //    dtEndFixed = dtEndFixed.AddDays(1);
-            //}
-            dtLoop = dtLoop.AddDays(-2); // หาวันที่สามารถลงยอด D/O ได้ใกล้และเร็วที่สุดจากวันที่ Stock ติดลบ - PrdLeadtime
-            //bool statedayoff = false; // true ส่ง false ไม่ส่ง
-
-            //switch (dtLoop.ToString("ddd"))
-            //{
-            //    case "Mon":
-            //        statedayoff = (vdMaster.VdMon == true) ? true : false;
-            //        break;
-            //    case "Tue":
-            //        statedayoff = (vdMaster.VdTue == true) ? true : false;
-            //        break;
-            //    case "Wed":
-            //        statedayoff = (vdMaster.VdWed == true) ? true : false;
-            //        break;
-            //    case "Thu":
-            //        statedayoff = (vdMaster.VdThu == true) ? true : false;
-            //        break;
-            //    case "Fri":
-            //        statedayoff = (vdMaster.VdFri == true) ? true : false;
-            //        break;
-            //    case "Sat":
-            //        statedayoff = (vdMaster.VdSat == true) ? true : false;
-            //        break;
-            //    case "Sun":
-            //        statedayoff = (vdMaster.VdSun == true) ? true : false;
-            //        break;
-            //    default:
-            //        statedayoff = false;
-            //        break;
-            //}
-
-
-            //if (vdMaster.) // เช็คว่าหาก -2 วัน ห้ามตรงกับ holiday, delivery cycle supplier
-            //{
-
-            //}
-            //if (dtLoop.Date < dtEndFixed.Date)
-            //{
-
-            //    dtLoop = dtEndFixed;
-            //}
+            dtLoop = dtLoop.AddDays(-2);
             if (dtLoop.Date <= dtEndFixed.Date)
             {
                 dtLoop = dtEndFixed.AddDays(1);
             }
-            bool isHoliday = false;
-
-            bool CanDelivery = VdMaster.ContainsKey(dtLoop.ToString("ddd").ToUpper()) ? VdMaster[dtLoop.ToString("ddd").ToUpper().ToUpper()] : false;
-            if (CanDelivery)
+            string strDtLoop = dtLoop.ToString("yyyy-MM-dd");
+            bool is_delivery = true;
+            if (FixedInfos.list_no_delivery_in_fixed.IndexOf(strDtLoop) != -1 || FixedInfos.list_holiday.IndexOf(strDtLoop) != -1)
             {
-                CanDelivery = holiday.Any(x => Convert.ToInt32(x.ymd) == Convert.ToInt32(dtLoop.ToString("yyyyMMdd"))) == true ? false : true;
+                is_delivery = false;
             }
             bool Increment = false; // สำหรับการ เพิ่ม หรือ ลด วันที่ เพื่อหาวันที่สามารถจัดส่งได้ false -1 
-            while (CanDelivery == false)
+            while (is_delivery == false)
             {
                 if (Increment == false)
                 {
@@ -821,15 +712,13 @@ namespace DeliveryOrderAPI
                         break;
                     }
                 }
-                CanDelivery = VdMaster.ContainsKey(dtLoop.ToString("ddd").ToUpper()) ? VdMaster[dtLoop.ToString("ddd").ToUpper().ToUpper()] : false;
-
-                if (CanDelivery)
+                is_delivery = true;
+                if (FixedInfos.list_no_delivery_in_fixed.IndexOf(strDtLoop) != -1 || FixedInfos.list_holiday.IndexOf(strDtLoop) != -1)
                 {
-                    CanDelivery = holiday.Any(x => Convert.ToInt32(x.ymd) == Convert.ToInt32(dtLoop.ToString("yyyyMMdd"))) == true ? false : true;
+                    is_delivery = false;
                 }
-
             }
-            if (CanDelivery == true)
+            if (is_delivery == true)
             {
                 int index = response.FindIndex(x => x.Vender == vender && x.PartNo == part && x.Date.ToString(YMDFormat) == dtLoop.ToString(YMDFormat));
                 if (index != -1)
@@ -909,14 +798,14 @@ namespace DeliveryOrderAPI
 
 
             // ********** ADD NEW 08/01/25 get caledar from alpha 011 ************** //
-            List<CalendarAlpha> rDictHoliday = GetHolidayAlpha().Where(x => Convert.ToInt32(x.ymd) >= Convert.ToInt32(ymd) && Convert.ToInt32(x.ymd) <= Convert.ToInt32(dtNow.AddDays(countFixed).ToString("yyyyMMdd"))).ToList();
+            //List<CalendarAlpha> rDictHoliday = GetHolidayAlpha().Where(x => Convert.ToInt32(x.ymd) >= Convert.ToInt32(ymd) && Convert.ToInt32(x.ymd) <= Convert.ToInt32(dtNow.AddDays(countFixed).ToString("yyyyMMdd"))).ToList();
 
-            List<string> dciHoliday = rDictHoliday.Where(x => DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Saturday &&
-                                      DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Sunday).Select(x => x.ymd).ToList();
+            //List<string> dciHoliday = rDictHoliday.Where(x => DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Saturday &&
+            //                          DateTime.ParseExact(x.ymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date.DayOfWeek != DayOfWeek.Sunday).Select(x => x.ymd).ToList();
 
 
 
-            List<DoHistoryDev> Historys = new List<DoHistoryDev>();
+                List<DoHistoryDev> Historys = new List<DoHistoryDev>();
             try
             {
                 Historys = _DBSCM.DoHistoryDevs.Where(x => x.Revision == 999).OrderBy(x => x.Partno).ToList();
@@ -938,6 +827,10 @@ namespace DeliveryOrderAPI
                 ListVenderOfBuyer = ListVenderOfBuyer.Where(x => x.RefCode == vdcode).ToList();
             }
             List<DoVenderMaster> VdStds = _DBSCM.DoVenderMasters.ToList();
+
+            // PEERAPONG [24/02/2025]
+            //List<PropHoliday> rHoliday = GetALPHAHoliday();
+            // PEERAPONG [24/02/2025] 
             foreach (DoDictMstr itemVender in ListVenderOfBuyer)
             {
                 string vender = itemVender.RefCode!;
@@ -948,17 +841,20 @@ namespace DeliveryOrderAPI
                     dtRun = dtNow.AddDays(VdProdLead);
                     dtEnd = statusWarining == true ? dtNow.AddDays(VdProdLead) : dtNow.AddDays(VdProdLead + dRun);
                 }
+                // PEERAPONG [24/02/2025]
+                FixedInfos = GetHolidayInfos(oVdStd);
+                //DateTime dtEndFixed = dtNow.AddDays(((oVdStd.VdProdLead != null ? (int)oVdStd.VdProdLead : 0) - 1) + 1);
+                DateTime dtEndFixed = FixedInfos.end_date;
+                // PEERAPONG [24/02/2025]
+
                 Dictionary<string, bool> VenderDelivery = getDaysDelivery(oVdStd);
                 if (!VenderDeliveryMaster.ContainsKey(vender)) { VenderDeliveryMaster.Add(vender, VenderDelivery); }
 
                 // *** AFTER FIX DATE ***
                 List<ViDoPlan> Plans = GetPlans(vender, dtNow, dtEnd);
 
-
                 // *** GET DATA FROM RADIS ***
                 //List<ViDoPlan> Plans = await getRedis($"{"DO_PrdPlan_" + dtNow.ToString("yyyyMMdd")}");
-
-
 
                 // *** BETWEEN FIX DATE ***
                 List<ViDoPlan> PlansHistoryDev = GetPlansHistoryDev(vender, dtNow, dtEnd);
@@ -980,46 +876,25 @@ namespace DeliveryOrderAPI
                 List<MDOAct> DOActs = GetDoActs(dtStart, dtEnd, PartJoin, vender);
                 List<MPO> POs = GetPoDIT(dtStart, dtEnd, PartJoin);
 
-                // ********** EDIT 15/11/24 Support holiday ************** //
+                //DateTime dtnewFixed = DateTime.Now;
+                //int count = 0;
 
-                DateTime dtEndFixed = dtNow.AddDays(((oVdStd.VdProdLead != null ? (int)oVdStd.VdProdLead : 0) - 1) + 1);
+                //while (count <= (int)oVdStd.VdProdLead)
+                //{  
+                //    // ********** EDIT 08/01/25 Update ************** //
+                //    if (rDictHoliday.Where(x => x.ymd == dtnewFixed.ToString("yyyyMMdd")).ToList().Count > 0)
+                //    {
 
-                // ********** EDIT 15/11/24 Update ************** //
-
-                DateTime dtnewFixed = DateTime.Now;
-                int count = 0;
-
-                while (count <= (int)oVdStd.VdProdLead)
-                {
-
-
-                    //if (dtnewFixed.DayOfWeek == DayOfWeek.Saturday || dtnewFixed.DayOfWeek == DayOfWeek.Sunday)
-                    //{
-
-                    //}
-
-                    // ********** EDIT 08/01/25 Update ************** //
-                    if (rDictHoliday.Where(x => x.ymd == dtnewFixed.ToString("yyyyMMdd")).ToList().Count > 0)
-                    {
-
-                    }
-                    else
-                    {
-                        fixDateHiglight.Add(dtnewFixed.ToString("yyyy-MM-dd"));
-                        count++;
-                        if (count == (int)oVdStd.VdProdLead) break;
-
-                    }
-
-
-                    dtnewFixed = dtnewFixed.AddDays(1);
-                }
-
-                dtEndFixed = dtnewFixed;
-
-
-
-
+                //    }
+                //    else
+                //    {
+                //        fixDateHiglight.Add(dtnewFixed.ToString("yyyy-MM-dd"));
+                //        count++;
+                //        if (count == (int)oVdStd.VdProdLead) break;
+                //    }
+                //    dtnewFixed = dtnewFixed.AddDays(1);
+                //}
+                //dtEndFixed = dtnewFixed;
                 // ************************************ //
 
                 OracleCommand strGetPo = new OracleCommand();
@@ -1037,7 +912,7 @@ namespace DeliveryOrderAPI
                                           and itemno like '%' 
                                           and APBIT IN ('U','P')
                                           and C.htcode = :htcode
-                                            and to_date(delymd,'yyyyMMdd') >= sysdate-7";
+                                            --and to_date(delymd,'yyyyMMdd') >= sysdate-7";
                 strGetPo.Parameters.Add(new OracleParameter(":htcode", vender));
                 DataTable dt = dbAlpha.Query(strGetPo);
                 foreach (DataRow dr in dt.Rows)
@@ -1055,13 +930,11 @@ namespace DeliveryOrderAPI
                     rPOFIFO.Add(iPOFIFO);
                 }
 
-                //Parts = Parts.Where(x => x.Partno == "3PD06362-1").ToList();
+                //Parts = Parts.Where(x => x.Partno == "2P659567/1-1").ToList();
                 foreach (DoPartMaster itemPart in Parts)
                 {
-
                     // ************** แก้ดึง STOCK ส่งแค่ PARTNO ไปเช็ค 21/01/2025 *******************
                     List<MStockAlpha> StockAlpha = GetStockPS8AM(itemPart.Partno, itemPart.Cm);
-
                     string Part = itemPart.Partno.Trim();
                     string Cm = itemPart.Cm;
                     int? BoxQty = itemPart.BoxQty;
@@ -1074,6 +947,7 @@ namespace DeliveryOrderAPI
                     int Pdlt = oHelper.ConvIntEmptyToInt(itemPart.Pdlt);
                     double Stock = 0;
                     DateTime dtLoop = dtStart;
+                    string strDtLoop = dtLoop.ToString("yyyyMMdd");
                     double nPoFiFo = rPOFIFO.Where(x => x.partno == Part).Sum(x => x.whblbqty);
                     double defPOFIFO = nPoFiFo;
                     DoVenderMaster objVender = ListVenderMaster.FirstOrDefault(x => x.VdCode == vender)!;
@@ -1099,18 +973,21 @@ namespace DeliveryOrderAPI
                         itemDO.vdCode = vender;
                         itemDO.vdName = objVender != null ? objVender.VdDesc : vender;
                         itemDO.Date = dtLoop;
-                        if (dtLoop > dtEndFixed)
-                        {
-                            //DoDictMstr isHoliday = rDictHoliday.FirstOrDefault(x => x.Code == dtLoop.ToString("yyyyMMdd"));
+                        //if (dtLoop > dtEndFixed)
+                        //{
+                        //    // EDIT : [24/02/2025] PEERAPONG 
+                        //    //CalendarAlpha isHoliday = rDictHoliday.FirstOrDefault(x => x.ymd == dtLoop.ToString("yyyyMMdd"));
+                        //    // CalendarAlpha isHoliday = rDictHoliday.FirstOrDefault(x => x.ymd == dtLoop.ToString("yyyyMMdd"));
+                        //    if (FixedInfos.list_no_delivery_in_fixed.IndexOf(strDtLoop) != -1 || FixedInfos.list_holiday.IndexOf(strDtLoop) != -1)
+                        //    {
+                        //        itemDO.holiday = true;
+                        //    }
 
-                            // ********** ADD NEW 08/01/25 get caledar from alpha 011 ************** /
-                            CalendarAlpha isHoliday = rDictHoliday.FirstOrDefault(x => x.ymd == dtLoop.ToString("yyyyMMdd"));
-
-                            if (isHoliday != null) // Date [N] = Holiday
-                            {
-                                itemDO.holiday = true;
-                            }
-                        }
+                        //    //if (isHoliday != null) // Date [N] = Holiday
+                        //    //{
+                        //    //    itemDO.holiday = true;
+                        //    //}
+                        //}
                         MPickList itemPickList = PickLists.FirstOrDefault(x => x.Partno == Part && x.Idate == dtLoop.Date.ToString(YMDFormat))!;
                         if (itemPickList != null)
                         {
@@ -1132,14 +1009,8 @@ namespace DeliveryOrderAPI
                             }
                         }
                         DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part && x.Revision == 999)!;
-                        //if ((dtNow > dtDistribute && dtLoop.Date <= dtEndFixed.Date) || (dtNow <= dtDistribute && dtLoop.Date <= dtEndFixed.Date) && oHis != null)
                         if (dtLoop.Date <= dtEndFixed.Date && oHis != null) // อดีด -> [E] Fixed
                         {
-                            // 13 > 8 && 13 <= 18 || 13 <= 8 && 13 <= 18
-                            //DoHistoryDev oHis = Historys.FirstOrDefault(x => x.VdCode == vender && x.DateVal == dtLoop.ToString(YMDFormat) && x.Partno == Part)!;
-                            //if (oHis != null)
-                            //{
-
                             itemDO.Plan = (double)oHis.PlanVal!;
                             itemDO.PlanPrev = itemDO.Plan;
                             //itemDO.Do = nPoFiFo < (double)oHis.DoVal! ? nPoFiFo : (double)oHis.DoVal!;
@@ -1166,8 +1037,6 @@ namespace DeliveryOrderAPI
                                     itemDO.PlanPrev = itemDO.Plan;
 
                                 }
-
-
                                 planP91_QTY = itemPlan == null ? 0 : itemPlan.Qty;
                                 planHistoryDev = itemPlanHistoryDev == null ? 0 : itemPlanHistoryDev.Qty;
 
@@ -1176,9 +1045,6 @@ namespace DeliveryOrderAPI
                                     itemDO.changePlan = true;
                                     itemDO.HistoryDevPlanQTY = planHistoryDev;
                                 }
-                                // ================================================================================ //
-                                // [E] ========= เช็คว่าประวัติแผนการผลิต ตรงหรือไม่ตรง กับแผนผลิต (ปัจจุบัน) [16/07/24 19:40] ===== //
-                                // ================================================================================ //
                                 Stock -= itemDO.Plan;
                                 Stock += itemDO.Do;
                                 itemDO.Stock = Stock;
@@ -1186,11 +1052,18 @@ namespace DeliveryOrderAPI
                             //}
 
                             //================ SET PO ==================//
-                            MPO itemPO = POs.FirstOrDefault(x => x.partNo.Trim() == Part && x.date == dtLoop.Date.ToString(YMDFormat) && x.vdCode == vender)!;
-                            if (itemPO != null)
+                            //MPO itemPO = POs.FirstOrDefault(x => x.partNo.Trim() == Part && x.date == dtLoop.Date.ToString(YMDFormat) && x.vdCode == vender)!;
+                            //if (itemPO != null)
+                            //{
+                            //    itemDO.PO = itemPO.qty;
+                            //}
+
+                            var oPO = rPOFIFO.FirstOrDefault(x => x.partno.Trim() == Part && x.delymd == dtLoop.Date.ToString(YMDFormat) && x.htcode == vender);
+                            if (oPO != null)
                             {
-                                itemDO.PO = itemPO.qty;
+                                itemDO.PO = oPO.whblbqty;
                             }
+
                             //================ SET PO ==================//
                             //if (dtLoop.Date == dtNow.Date)
                             //{
@@ -1237,7 +1110,10 @@ namespace DeliveryOrderAPI
                                 //double DO = GetDoVal(RequestStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock)
 
                                 DO = DO < 0 ? 0 : DO;
-                                DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+
+                                // EDIT : [24/02/2025] PEERAPONG.K
+                                DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty);
+                                //DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); 
                                 ModelRefreshStock rData = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
                                 DOITEM = rData.data;
                                 Stock = rData.Stock;
@@ -1253,36 +1129,21 @@ namespace DeliveryOrderAPI
                                 itemDO.Cm = Cm;
                                 itemDO.Vender = vender;
                                 itemDO.vdCode = vender;
-                                int countPlan = Plans.Where(x => x.Vender == itemDO.vdCode && x.Partno == itemDO.PartNo && x.Cm == itemDO.Cm &&
-                                                            (DateTime.ParseExact(x.Prdymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date >= DateTime.Now) && x.Qty > 0).Count();
-
-
-
-                                //&& countPlan > 0
-
-
-                                if ((Stock <= 0 || Stock < safetyStock))
+                                //int countPlan = Plans.Where(x => x.Vender == itemDO.vdCode && x.Partno == itemDO.PartNo && x.Cm == itemDO.Cm && (DateTime.ParseExact(x.Prdymd, "yyyyMMdd", CultureInfo.InvariantCulture).Date >= DateTime.Now) && x.Qty > 0).Count();
+                                if ((Stock < 0 || Stock < safetyStock))
                                 {
-                                    double RequireStock = Math.Abs(Stock) < safetyStock ? (safetyStock - Math.Abs(Stock)) : Math.Abs(Stock);
-                                    double DO = GetDoVal(RequireStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock)
-
-
-
+                                    double DemandStock = Math.Abs(Stock) < safetyStock ? (safetyStock - Math.Abs(Stock)) : Math.Abs(Stock);
+                                    double DO = GetDoVal(DemandStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock) 
                                     if (nPoFiFo == 0 || nPoFiFo < DO)
                                     {
-                                        // DO <= REMAIN PO FIFO
-
-                                        //nPoFiFo = nPoFiFo <= 0 ? 0 : nPoFiFo;
                                         DO = nPoFiFo;
-                                        //double test = rPOFIFO.Where(x => x.partno == Part).Sum(x => x.whblbqty);
-                                        //DO = (nPoFiFo <= 0 && DO <= test) ? DO : (DO > test ? test : nPoFiFo);
                                     }
                                     else
                                     {
                                         nPoFiFo -= DO;
                                     }
                                     DO = DO < 0 ? 0 : DO;
-                                    DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty, rDictHoliday); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+                                    DOITEM = ADJ_DO(DOITEM, vender, Part, dtLoop, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
                                 }
                                 ModelRefreshStock rData = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
                                 DOITEM = rData.data;
@@ -1294,6 +1155,38 @@ namespace DeliveryOrderAPI
                     }
                     DOITEM = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha).data;
                     DOITEM = RefreshPOFIFO(DOITEM, defPOFIFO, dtNow, Part);
+
+                    // ---------------------------------
+                    // UPDATE : [24/02/2025] PEERAPONG.K
+                    // ให้ตรวจเช็ค Stock รายการสุดท้าย เพื่อทำการออก DO 
+                    try
+                    {
+                        double DOLastRow = DOITEM.LastOrDefault().Stock;
+                        DateTime DateLastRow = DOITEM.LastOrDefault().Date;
+                        if ((DOLastRow < 0 || DOLastRow < safetyStock))
+                        {
+                            double DemandStock = Math.Abs(DOLastRow) < safetyStock ? (safetyStock - Math.Abs(DOLastRow)) : Math.Abs(DOLastRow);
+                            double DO = GetDoVal(DemandStock, itemPart, oVdStd); // คำนวน DO จาก mstr (Min, Max, Safety stock) 
+                            if (nPoFiFo == 0 || nPoFiFo < DO)
+                            {
+                                DO = nPoFiFo;
+                            }
+                            else
+                            {
+                                nPoFiFo -= DO;
+                            }
+                            DO = DO < 0 ? 0 : DO;
+                            DOITEM = ADJ_DO(DOITEM, vender, Part, DateLastRow, DO, VenderDelivery, oVdStd, nPoFiFo, BoxQty); // นำตัวเลข DO ไปลงวันที่ตาม PD Leadtime (D-2)
+                        }
+                        ModelRefreshStock LastRows = REFRESH_STOCK(DOITEM, vender, Part, Cm, StockAlpha);
+                        DOITEM = LastRows.data;
+                    }
+                    catch
+                    {
+
+                    }
+                    // UPDATE : [24/02/2025] PEERAPONG.K
+                    // ---------------------------------
                 }
             }
 
@@ -1312,19 +1205,60 @@ namespace DeliveryOrderAPI
             //}
 
             rPOFIFO = rPOFIFO.OrderBy(x => x.delymd).ToList();
-            fixDateHiglight = fixDateHiglight.Distinct().ToList();
+            //fixDateHiglight = fixDateHiglight.Distinct().ToList();
             return new MODEL_GET_DO()
             {
-                fixDateYMD = fixDateHiglight.Distinct().ToList(),
+                //fixDateYMD = fixDateHiglight.Distinct().ToList(),
+                fixDateYMD = FixedInfos.list_delivery_in_fixed,
+                list_no_delivery_in_fixed = FixedInfos.list_no_delivery_in_fixed,
+                list_delivery_in_fixed = FixedInfos.list_delivery_in_fixed,
+                list_holiday = FixedInfos.list_holiday,
+                startFixed = FixedInfos.str_date.ToString("yyyy-MM-dd"),
+                endFixed = FixedInfos.end_date.ToString("yyyy-MM-dd"),
                 data = DOITEM,
                 PartMaster = PARTMASTER,
                 VenderMaster = VENDERMASTER,
                 nbr = nbr,
                 VenderDelivery = VenderDeliveryMaster,
-                DciHoliday = dciHoliday,
+                //DciHoliday = dciHoliday,
                 VenderSelected = oVenderSelect,
                 ListPO = rPOFIFO.OrderBy(x => x.delymd).ToList(),
             };
+        }
+
+        private List<PropHoliday> GetALPHAHoliday()
+        {
+            List<PropHoliday> oHolidays = new List<PropHoliday>();
+            OracleCommand ora = new OracleCommand();
+            ora.CommandText = $@"select TO_CHAR(TO_DATE(YYDAY,'YYYYMMDD'),'YYYY-MM-DD') YYDAY,TO_CHAR(TO_DATE(YYDAY, 'YYYYMMDD'), 'Dy') DAY_ABBR FROM ND_CAL_TBL_V1 where NENDO = '2025' and FUKAKU = 0 AND TO_CHAR(TO_DATE(YYDAY, 'YYYYMMDD'), 'Dy') != 'Sat' AND YYDAY <= TO_CHAR(SYSDATE+14,'yyyyMMdd')  order by YYDAY";
+            DataTable dtAlpha = dbAlpha.Query(ora);
+            SqlCommand sql = new SqlCommand();
+            sql.CommandText = $@"SELECT FORMAT(CAST([NOTE] AS DATE),'yyyy-MM-dd') YYDAY,FORMAT(CONVERT(DATE, [NOTE], 112), 'ddd') DAY_ABBR ,DESCRIPTION  FROM [dbSCM].[dbo].[DO_DictMstr] where DICT_TYPE = 'holiday' and CODE like ''+ FORMAT(GETDATE(),'yyyy') +'%'  AND NOTE <= FORMAT(DATEADD(day,14,GETDATE()),'yyyyMMdd')";
+            DataTable dtSql = dbSCM.Query(sql);
+
+            dtAlpha.Merge(dtSql);
+
+            var dt = dtAlpha.AsEnumerable().GroupBy(x => new
+            {
+                ddymd = x.Field<string>("YYDAY"),
+                day_abbr = x.Field<string>("DAY_ABBR")
+            }).Select(n => new
+            {
+                n.Key.ddymd,
+                n.Key.day_abbr
+            });
+            foreach (DataRow dr in dtAlpha.Rows)
+            {
+                string ymd = dr["YYDAY"].ToString();
+                string day_abbr = dr["DAY_ABBR"].ToString();
+                string day_desc = dr["DESCRIPTION"].ToString();
+                PropHoliday oHoliday = new PropHoliday();
+                oHoliday.ymd = ymd;
+                oHoliday.day_abbr = day_abbr;
+                oHoliday.day_desc = day_desc;
+                oHolidays.Add(oHoliday);
+            }
+            return oHolidays;
         }
 
 
@@ -1927,7 +1861,6 @@ namespace DeliveryOrderAPI
         public List<CalendarAlpha> GetHolidayAlpha()
         {
             List<CalendarAlpha> calendarAlphas = new List<CalendarAlpha>();
-
             OracleCommand strGetPo = new OracleCommand();
             strGetPo.CommandText = @"select YYDAY FROM ND_CAL_TBL_V1
                                      where NENDO = :YEAR and FUKAKU = 0 
@@ -1937,16 +1870,10 @@ namespace DeliveryOrderAPI
             string[] isHoliday = new string[dt.Rows.Count];
             foreach (DataRow dr in dt.Rows)
             {
-
                 CalendarAlpha calendarAlpha = new CalendarAlpha();
                 calendarAlpha.ymd = dr["YYDAY"].ToString();
-
                 calendarAlphas.Add(calendarAlpha);
-
-
-
             }
-
             return calendarAlphas;
         }
 
@@ -2062,18 +1989,163 @@ namespace DeliveryOrderAPI
             }
         }
 
+        public PropGetFixedOfSupplier GetHolidayInfos(DoVenderMaster vdMaster)
+        {
+            DateTime dtNow = DateTime.Now;
+            PropGetFixedOfSupplier prop = new PropGetFixedOfSupplier();
+            int nProdLeadOfSupplier = 3;
+            try
+            {
+                nProdLeadOfSupplier = Convert.ToInt32(vdMaster.VdProdLead);
+            }
+            catch
+            {
+                nProdLeadOfSupplier = 3;
+            }
+            List<PropHoliday> oALPHAHoliday = GetALPHAHoliday();
+            DateTime dtPeriod = dtNow;
+            try
+            {
+                int nLoop = nProdLeadOfSupplier;
+                while (nLoop > 0) // ลูปเพื่อหาว่าวันที่สิ้นสุด Fixed คือวันไหน
+                {
+                    string ShortDay = dtPeriod.ToString("ddd");
+                    bool Avaliable = false;
+                    switch (ShortDay)
+                    {
+                        case "Mon":
+                            Avaliable = (vdMaster.VdMon == true) ? true : false;
+                            break;
+                        case "Tue":
+                            Avaliable = (vdMaster.VdTue == true) ? true : false;
+                            break;
+                        case "Wed":
+                            Avaliable = (vdMaster.VdWed == true) ? true : false;
+                            break;
+                        case "Thu":
+                            Avaliable = (vdMaster.VdThu == true) ? true : false;
+                            break;
+                        case "Fri":
+                            Avaliable = (vdMaster.VdFri == true) ? true : false;
+                            break;
+                        case "Sat":
+                            Avaliable = (vdMaster.VdSat == true) ? true : false;
+                            break;
+                        case "Sun":
+                            Avaliable = (vdMaster.VdSun == true) ? true : false;
+                            break;
+                        default:
+                            Avaliable = false;
+                            break;
+                    }
+                    if (oALPHAHoliday.Select(x => x.ymd).ToList().IndexOf(dtPeriod.ToString("yyyy-MM-dd")) != -1)
+                    {
+                        Avaliable = false;
+                    }
+                    if (Avaliable == true)
+                    {
+                        prop.list_delivery_in_fixed.Add(dtPeriod.ToString("yyyy-MM-dd"));
+                        dtPeriod = dtPeriod.AddDays(1);
+                        nLoop--;
+                    }
+                    else
+                    {
+                        prop.list_no_delivery_in_fixed.Add(dtPeriod.ToString("yyyy-MM-dd"));
+                        dtPeriod = dtPeriod.AddDays(1);
+                    }
+                }
+            }
+            catch
+            {
+
+            }
+            List<string> list_holiday = new List<string>();
+            if (oALPHAHoliday.Count > 0)
+            {
+                List<string> oStrALPHAHoliday = new List<string>();
+                try
+                {
+                    oStrALPHAHoliday = oALPHAHoliday.Select(x => x.ymd).ToList();
+                    list_holiday = oStrALPHAHoliday.Where(x => DateTime.ParseExact(x, "yyyy-MM-dd", CultureInfo.InvariantCulture).Date < dtNow.Date || DateTime.ParseExact(x, "yyyy-MM-dd", CultureInfo.InvariantCulture).Date > dtPeriod.Date).ToList();
+                    DateTime dtForecast = dtPeriod;
+                    while (dtForecast.Date < dtNow.AddDays(14))
+                    {
+                        string ShortDay = dtForecast.ToString("ddd");
+                        bool Avaliable = false;
+                        switch (ShortDay)
+                        {
+                            case "Mon":
+                                Avaliable = (vdMaster.VdMon == true) ? true : false;
+                                break;
+                            case "Tue":
+                                Avaliable = (vdMaster.VdTue == true) ? true : false;
+                                break;
+                            case "Wed":
+                                Avaliable = (vdMaster.VdWed == true) ? true : false;
+                                break;
+                            case "Thu":
+                                Avaliable = (vdMaster.VdThu == true) ? true : false;
+                                break;
+                            case "Fri":
+                                Avaliable = (vdMaster.VdFri == true) ? true : false;
+                                break;
+                            case "Sat":
+                                Avaliable = (vdMaster.VdSat == true) ? true : false;
+                                break;
+                            case "Sun":
+                                Avaliable = (vdMaster.VdSun == true) ? true : false;
+                                break;
+                            default:
+                                Avaliable = false;
+                                break;
+                        }
+                        if (Avaliable == false) // == holiday
+                        {
+                            list_holiday.Add(dtForecast.ToString("yyyy-MM-dd"));
+                        }
+                        dtForecast = dtForecast.AddDays(1);
+                    }
+                }
+                catch
+                {
+                    oStrALPHAHoliday = new List<string>();
+                }
+            }
+            prop.list_holiday = list_holiday;
+            prop.leadtime = nProdLeadOfSupplier;
+            prop.str_date = dtNow;
+            prop.end_date = dtPeriod.AddDays(-1);
+            return prop;
+        }
+        public List<Dictionary<string, object>> DataTableToJson(DataTable table)
+        {
+            var rows = new List<Dictionary<string, object>>();
+
+            foreach (DataRow row in table.Rows)
+            {
+                var rowDictionary = new Dictionary<string, object>();
+                foreach (DataColumn column in table.Columns)
+                {
+                    // Replace DBNull or null with an empty string
+                    rowDictionary[column.ColumnName] = row[column] == DBNull.Value || row[column] == null
+                        ? ""
+                        : row[column];
+                }
+                rows.Add(rowDictionary);
+            }
+            return rows;
+        }
+
+
         public List<MRESULTDO> calDoPallet(List<MRESULTDO> DOITEM, string vdcode)
         {
             DateTime loopDates = DateTime.Now.AddDays(-7);
             int countLoop = 1;
             decimal totalBox = 0;
             decimal totalPallet = 0;
-
             List<MRESULTDO> _docal = new List<MRESULTDO>();
             while (countLoop <= 18) // state - enddate
             {
-
-
                 MRESULTDO doCalPallet = new MRESULTDO();
 
                 if (vdcode == "154018")
@@ -2089,36 +2161,18 @@ namespace DeliveryOrderAPI
                     totalPallet = totalBox / Convert.ToDecimal(palletPerBox);
 
                 }
-
-
-                //totalPallet = totalBox / 40;
-
-
                 doCalPallet.PartNo = "TOTAL";
                 doCalPallet.Date = loopDates;
                 doCalPallet.vdCode = "TOTAL";
                 doCalPallet.vdName = "TOTAL";
                 doCalPallet.Vender = "TOTAL";
-
                 doCalPallet.Box = (int)Math.Ceiling(totalBox);
                 doCalPallet.Pallet = (int)Math.Ceiling(totalPallet);
-
                 _docal.Add(doCalPallet);
-
                 loopDates = loopDates.AddDays(1);
                 countLoop++;
-
             }
-
             return _docal;
-
         }
-
-
-
-
-
-
-
     }
 }

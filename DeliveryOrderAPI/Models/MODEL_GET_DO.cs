@@ -4,6 +4,11 @@
     {   
 
         public List<string> fixDateYMD { get; set; }
+        public List<string> list_no_delivery_in_fixed { get; set; } = new List<string>();
+        public List<string> list_delivery_in_fixed { get; set; } = new List<string>();
+        public List<string> list_holiday { get; set; } = new List<string>();
+        public string startFixed { get; set; } = "";
+        public string endFixed { get; set; } = "";
         public List<MRESULTDO> data { get; set; }
         public string nbr { get; set; }
         public List<DoPartMaster> PartMaster { get; set; }

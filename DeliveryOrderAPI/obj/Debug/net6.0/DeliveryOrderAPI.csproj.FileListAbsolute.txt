@@ -289,3 +289,5 @@ D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\refint\
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.pdb
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\DeliveryOrderAPI.genruntimeconfig.cache
 D:\Project\2024\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\obj\Debug\net6.0\ref\DeliveryOrderAPI.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\Pipelines.Sockets.Unofficial.dll
+D:\git\DCI_DELIVERY_ORDER_API\DeliveryOrderAPI\bin\Debug\net6.0\StackExchange.Redis.dll

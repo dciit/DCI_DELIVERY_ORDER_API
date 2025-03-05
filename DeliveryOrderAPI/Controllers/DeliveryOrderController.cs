@@ -87,11 +87,11 @@ namespace DeliveryOrderAPI.Controllers
         {
             bool? hiddenPartNoPlan = param.hiddenPartNoPlan;
             MODEL_GET_DO response = await serv.CalDO(false, param.vdCode!, param, "", 0, hiddenPartNoPlan, false);
-           /* HttpContext.Response.Body = new MemoryStream();
-            await using var writer = new StreamWriter(HttpContext.Response.Body);
+            /* HttpContext.Response.Body = new MemoryStream();
+             await using var writer = new StreamWriter(HttpContext.Response.Body);
 
-            await writer.WriteAsync(JsonSerializer.Serialize(response));
-            await writer.FlushAsync();*/
+             await writer.WriteAsync(JsonSerializer.Serialize(response));
+             await writer.FlushAsync();*/
 
             //HttpContext.Response.Body.Seek(0, SeekOrigin.Begin);
             //return File(HttpContext.Response.Body, "application/json");
@@ -99,29 +99,26 @@ namespace DeliveryOrderAPI.Controllers
             return Ok(response);
         }
 
-        [HttpGet]
-        [Route("/calDO")]
-        public async Task<IActionResult> calDO()
-        {
-            deleteRedis();
+        //[HttpGet]
+        //[Route("/calDO")]
+        //public async Task<IActionResult> calDO()
+        //{
+        //    deleteRedis();
 
-            DateTime dtNow = DateTime.Now;
-            string nbr = dtNow.ToString("yyyyMMdd");
-            int rev = 0;
-            DoHistoryDev prev = efSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
-            if (prev != null)
-            {
-                rev = (int)prev.Rev!;
-            }
-            rev++;
-            MODEL_GET_DO response = await serv.CalDO(true, "", null, nbr, rev, false, false);
-      
-
-
-            string _key = "CAL_DO";
-            setRedis(_key, response);
-            return Ok(response);
-        }
+        //    DateTime dtNow = DateTime.Now;
+        //    string nbr = dtNow.ToString("yyyyMMdd");
+        //    int rev = 0;
+        //    DoHistoryDev prev = efSCM.DoHistoryDevs.FirstOrDefault(x => x.RunningCode == nbr && x.Revision == 999)!;
+        //    if (prev != null)
+        //    {
+        //        rev = (int)prev.Rev!;
+        //    }
+        //    rev++;
+        //    MODEL_GET_DO response = await serv.CalDO(true, "", null, nbr, rev, false, false);
+        //    string _key = "CAL_DO";
+        //    setRedis(_key, response);
+        //    return Ok(response);
+        //}
 
 
         [HttpGet]
@@ -165,10 +162,7 @@ namespace DeliveryOrderAPI.Controllers
                 listPrevDay.ForEach(a => a.Revision = 1);
                 efSCM.SaveChanges();
             }
-
-           
             setRedis(_key, DOInfo);
-
             return Ok(new
             {
                 status = 1,
@@ -1198,7 +1192,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 //Console.WriteLine($"An error occurred: {ex.Message}");
             }
 
-           
+
         }
 
         [HttpGet]
@@ -1535,7 +1529,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                             if ((round == 0 ? venderGroup.partNo : groupList[round - 1].partNo) != venderGroup.partNo)
                             {
 
-                                if (round == 0  || colorIndex >= 1)
+                                if (round == 0 || colorIndex >= 1)
                                 {
                                     colorIndex = 0;
                                 }
@@ -1707,13 +1701,7 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
                 }
 
             }
-
-
             return Ok();
-
-
-
-
         }
 
 
@@ -1769,5 +1757,74 @@ GROUP BY COURSE.ID,COURSE.COURSE_CODE,COURSE.COURSE_NAME";
             return loopday;
 
         }
+
+//        [HttpGet]
+//        [Route("/IT_TEST_RERESH_DO_FROM_LOH")]
+//        public IActionResult IT_TEST()
+//        {
+//            SqlCommand sql = new SqlCommand();
+//            sql.CommandText = $@"SELECT A.* FROM (SELECT ROW_NUMBER() OVER (PARTITION BY DO_RUNNING,[LOG_VD_CODE],LOG_PART_NO,LOG_TO_DATE ORDER BY LOG_ID desc)  RN
+//, [LOG_ID]
+//,[LOG_VD_CODE]
+//      ,[DO_RUNNING] 
+//      ,[LOG_PART_NO]  
+//      ,[LOG_TO_DATE]  
+//      ,[LOG_NEXT_DO] 
+//	  ,[LOG_CREATE_DATE]
+//  FROM [dbSCM].[dbo].[DO_LOG_DEV]
+//  WHERE DO_RUNNING = '20250225'   
+//  ) A
+//  WHERE A.RN = 1 ";
+//            DataTable dt = dbSCM.Query(sql);
+//            foreach (DataRow dr in dt.Rows)
+//            {
+//                string running_code = dr["DO_RUNNING"].ToString();
+//                string partno = dr["LOG_PART_NO"].ToString();
+//                string date_val = dr["LOG_TO_DATE"].ToString();
+//                string do_val = dr["LOG_NEXT_DO"].ToString();
+//                string vd_code = dr["LOG_VD_CODE"].ToString();
+//                SqlCommand sqlupdate = new SqlCommand();
+//                sqlupdate.CommandText = $@"update [dbSCM].[dbo].[DO_HISTORY_DEV] set  do_val = '{do_val}' WHERE RUNNING_CODE = '20250226' AND PARTNO = '{partno}' AND DATE_VAL = '{date_val}' AND VD_CODE = '{vd_code}'";
+//                int update = dbSCM.ExecuteNonCommand(sqlupdate);
+//                if (update <= 0)
+//                {
+//                    Console.WriteLine("asdasd");
+//                }
+//            }
+//            return Ok();
+//        }
+        //[HttpGet]
+        //[Route("/GetListSupplierOfBuyer/{buyer}")]
+        //public IActionResult GetListSupplierOfBuyer(string buyer)
+        //{
+        //    SqlCommand sql = new SqlCommand();
+        //    sql.CommandText = $@"SELECT  CODE BUYER,REF_CODE SUPPLIER FROM [dbSCM].[dbo].[DO_DictMstr]   WHERE DICT_TYPE = 'BUYER' AND CODE = '{buyer}' AND DICT_STATUS = 'ACTIVE' GROUP BY CODE ,REF_CODE ";
+        //    DataTable dt = dbSCM.Query(sql);
+        //    return Ok(serv.DataTableToJson(dt));
+        //}
+        //[HttpGet]
+        //[Route("/GetBuyers")]
+        //public IActionResult GetBuyers()
+        //{
+        //    SqlCommand sql = new SqlCommand();
+        //    List<string> buyerCode = new List<string>();
+        //    List<string> buyerName = new List<string>();
+        //    sql.CommandText = $@"SELECT  DICT.CODE BUYER,DICT.REF_CODE SUPPLIER,EM.PREN + EM.NAME + ' ' + EM.SURN FULLNAME FROM [dbSCM].[dbo].[DO_DictMstr] DICT  
+        //                         LEFT JOIN [dbHRM].[dbo].[Employee] EM
+        //                         ON EM.CODE  COLLATE Thai_CI_AS = DICT.CODE  COLLATE Thai_CI_AS
+        //                         WHERE DICT.DICT_TYPE = 'BUYER' AND DICT.DICT_STATUS = 'ACTIVE'
+        //                         AND EM.CODE IS NOT NULL";
+        //    DataTable dt = dbSCM.Query(sql);
+        //    foreach (DataRow dr in dt.Rows)
+        //    {
+        //        string buyer = dr["BUYER"].ToString();
+        //        string supplier
+        //    }
+        //    return Ok(new
+        //    {
+        //        buyerCode = serv.DataTableToJson(),
+        //        supplier = serv.DataTableToJson(dt)
+        //    });
+        //}
     }
 }
